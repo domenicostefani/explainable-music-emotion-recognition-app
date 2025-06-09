@@ -1,0 +1,360 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Explainable Music Emotion Recognition</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .record-btn {
+            background-color: #ff4444;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 18px;
+            border-radius: 50px;
+            cursor: pointer;
+            margin-bottom: 20px;
+            transition: background-color 0.3s;
+        }
+        .record-btn:hover {
+            background-color: #dd3333;
+        }
+        .record-btn:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        .new-recording-btn {
+            background-color: #28a745;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-left: 10px;
+            transition: background-color 0.3s;
+        }
+        .new-recording-btn:hover {
+            background-color: #218838;
+        }
+        .clear-btn {
+            background-color: #f66032;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-left: 10px;
+            transition: background-color 0.3s;
+        }
+        .clear-btn:hover {
+            background-color: #d93a05;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background-color: #ddd;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 20px;
+            display: none;
+        }
+        .progress-fill {
+            height: 100%;
+            background-color: #4CAF50;
+            width: 0%;
+            transition: width 0.3s;
+        }
+        .waveform-container {
+            margin-top: 20px;
+            {% if not show_waveform %}display: none;{% endif %}
+        }
+        .waveform-img {
+            width: 100%;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .slice-overlay {
+            position: relative;
+            display: inline-block;
+            width: 100%;
+        }
+        .slice-button {
+            position: absolute;
+            background-color: rgba(255, 255, 0, 0.3);
+            border: 2px solid #ffaa00;
+            cursor: pointer;
+            height: 100%;
+            top: 0;
+            transition: background-color 0.3s;
+        }
+        .slice-button:hover {
+            background-color: rgba(255, 255, 0, 0.5);
+        }
+        .status {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 5px;
+            display: none;
+        }
+        .status.recording {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            color: #856404;
+        }
+        .status.ready {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .controls {
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container", style="text-align: center;">
+        <h1>Explainable Music Emotion Recognition</h1>
+        
+        <div class="controls">
+            <button id="recordBtn" class="record-btn" {% if show_waveform %}style="display: none;"{% endif %}>Record</button>
+            <button id="stopBtn" class="record-btn" style="background-color: #666; display: none;">Stop</button>
+            {% if show_waveform %}
+            <button id="newRecordingBtn" class="new-recording-btn">New Recording</button>
+            <button id="clearBtn" class="clear-btn">Clear</button>
+            {% else %}
+            {% endif %}
+        </div>
+        
+        <div id="timer" style="font-size: 24px; font-weight: bold; margin: 10px 0; display: none;">
+            Recording: <span id="timerDisplay">0.0s</span>
+        </div>
+        
+        <div id="status" class="status"></div>
+        
+        <div id="waveformContainer" class="waveform-container">
+            <h2>Recorded Waveform - Duration: <span id="waveformDuration"></span>s (Click on a section to zoom in)</h2>
+            <div class="slice-overlay">
+                <img id="waveformImg" class="waveform-img" alt="Waveform">
+                <!-- Slice buttons will be added dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const recordBtn = document.getElementById('recordBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const newRecordingBtn = document.getElementById('newRecordingBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const timer = document.getElementById('timer');
+        const timerDisplay = document.getElementById('timerDisplay');
+        const status = document.getElementById('status');
+        const waveformContainer = document.getElementById('waveformContainer');
+        const waveformImg = document.getElementById('waveformImg');
+        const waveformDuration = document.getElementById('waveformDuration');
+
+        let isRecording = false;
+        let timerInterval;
+
+        recordBtn.addEventListener('click', startRecording);
+        stopBtn.addEventListener('click', stopRecording);
+        if (newRecordingBtn) {
+            newRecordingBtn.addEventListener('click', startNewRecording);
+        }
+        if (clearBtn) {
+            clearBtn.addEventListener('click', clearRec);
+        }
+
+        function clearRec() {
+            if (newRecordingBtn) newRecordingBtn.style.display = 'block';
+            if (clearBtn) clearBtn.style.display = 'none';
+            waveformContainer.style.display = 'none';
+            status.style.display = 'none';
+
+
+            fetch('/clear_waveform', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Recording cleared:', data);
+                    startTimer();
+                });
+        }
+
+        // Load existing waveform if available
+        {% if show_waveform %}
+        window.addEventListener('load', function() {
+            loadExistingWaveform();
+        });
+        {% endif %}
+
+        function startNewRecording() {
+            // Reset the interface for new recording
+            recordBtn.style.display = 'inline-block';
+            if (newRecordingBtn) newRecordingBtn.style.display = 'inline-block';
+            if (clearBtn) clearBtn.style.display = 'none';
+            waveformContainer.style.display = 'none';
+            status.style.display = 'none';
+            
+            // Start new recording
+            startRecording();
+        }
+
+        function loadExistingWaveform() {
+            fetch('/get_waveform')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'ready') {
+                        displayWaveform(data);
+                        showStatus(`Recording complete! Duration: ${data.duration.toFixed(1)}s. Click on a section to zoom in.`, 'ready');
+                    }
+                });
+        }
+
+        function startRecording() {
+            if (isRecording) return;
+
+            isRecording = true;
+            recordBtn.style.display = 'none';
+            stopBtn.style.display = 'inline-block';
+            timer.style.display = 'block';
+            waveformContainer.style.display = 'none';
+            if (newRecordingBtn) newRecordingBtn.style.display = 'none';
+            
+            showStatus('Recording in progress... Click Stop when finished.', 'recording');
+
+            // Start recording
+            fetch('/start_recording', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Recording started:', data);
+                    startTimer();
+                });
+        }
+
+        function stopRecording() {
+            if (!isRecording) return;
+
+            fetch('/stop_recording', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Recording stopped:', data);
+                    finishRecording();
+                });
+        }
+
+        function startTimer() {
+            timerInterval = setInterval(() => {
+                fetch('/recording_status')
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.is_recording) {
+                            timerDisplay.textContent = data.duration.toFixed(1) + 's';
+                        }
+                    });
+            }, 100);
+        }
+
+        function finishRecording() {
+            clearInterval(timerInterval);
+            isRecording = false;
+            recordBtn.style.display = 'none';
+            stopBtn.style.display = 'none';
+            timer.style.display = 'none';
+            
+            showStatus('Processing waveform...', 'recording');
+            
+            fetch('/get_waveform')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'ready') {
+                        displayWaveform(data);
+                        showStatus(`Recording complete! Duration: ${data.duration.toFixed(1)}s. Click on a section to zoom in.`, 'ready');
+                        if (clearBtn) clearBtn.style.display = 'inline-block';
+                        
+                        // Show "New Recording" button
+                        if (!newRecordingBtn) {
+                            const newBtn = document.createElement('button');
+                            newBtn.id = 'newRecordingBtn';
+                            newBtn.className = 'new-recording-btn';
+                            newBtn.textContent = 'New Recording';
+                            newBtn.addEventListener('click', startNewRecording);
+                            document.querySelector('.controls').appendChild(newBtn);
+                        } else {
+                            newRecordingBtn.style.display = 'inline-block';
+                        }
+                    }
+                });
+        }
+
+        function addAlpha(color, opacity) {
+            // coerce values so it is between 0 and 1.
+            var _opacity = Math.round(Math.min(Math.max(opacity ?? 1, 0), 1) * 255);
+            return color + _opacity.toString(16).toUpperCase();
+        }
+
+        function displayWaveform(data) {
+            waveformImg.src = 'data:image/png;base64,' + data.plot;
+            waveformDuration.textContent = data.duration.toFixed(1);
+            waveformContainer.style.display = 'block';
+            
+            // Add clickable slice areas
+            const overlay = document.querySelector('.slice-overlay');
+            
+            // Remove existing slice buttons
+            const existingButtons = overlay.querySelectorAll('.slice-button');
+            existingButtons.forEach(btn => btn.remove());
+            
+            // Add new slice buttons based on actual duration
+            const numSlices = data.slices.length;
+            const sliceWidth = 100 / numSlices; // Equal width for each slice
+            
+            for (let i = 0; i < numSlices; i++) {
+                const sliceBtn = document.createElement('div');
+                sliceBtn.className = 'slice-button';
+                sliceBtn.style.backgroundColor = addAlpha(data.slices[i].color,0.2) || 'rgba(255, 255, 0, 0.3)';
+                // Hover background color
+                sliceBtn.style.left = data.slices[i].left*100 + '%' //(i * sliceWidth) + '%';
+                sliceBtn.style.width = data.slices[i].width*100 + '%'  //sliceWidth + '%';
+                sliceBtn.title = `Click to view slice ${data.slices[i].label}`;
+                sliceBtn.addEventListener('click', () => {
+                    window.location.href = `/slice/${i}`;
+                });
+
+                // Add event listener for hover effect
+                sliceBtn.addEventListener('mouseover', () => {
+                    sliceBtn.style.backgroundColor = addAlpha(data.slices[i].color, 0.5);
+                });
+                sliceBtn.addEventListener('mouseout', () => {
+                    sliceBtn.style.backgroundColor = addAlpha(data.slices[i].color, 0.2);
+                });
+
+                overlay.appendChild(sliceBtn);
+            }
+        }
+
+        function showStatus(message, type) {
+            status.textContent = message;
+            status.className = `status ${type}`;
+            status.style.display = 'block';
+        }
+    </script>
+</body>
+</html>
