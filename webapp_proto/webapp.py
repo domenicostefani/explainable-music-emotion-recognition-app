@@ -8,7 +8,7 @@ import base64
 import time
 import threading
 from datetime import datetime
-import emotions, math, jack, soundfile as sf
+import emotions, math, jack, soundfile as sf, librosa
 
 
 class MonoAudioRecorder:
@@ -52,6 +52,7 @@ class MonoAudioRecorder:
         self.buffer = []
 
 recorder = MonoAudioRecorder()
+recFilename = None # To be locked and written from different threads
 
 
 
@@ -133,6 +134,7 @@ for jackAudioOut in playback:
 
 # Global variable to store the current waveform data
 current_waveform = None
+waveform_json = None
 recording_status = {"is_recording": False, "duration": 0, "start_time": None}
 
 def generate_sinusoid(duration):
@@ -153,6 +155,32 @@ def generate_sinusoid(duration):
     
     return t, waveform
 
+def read_wav_file(filename):
+    """Read a WAV file and return time and waveform data"""
+    try:
+        data, sample_rate = sf.read(filename, dtype='float32')
+        if len(data.shape) > 1:  # If stereo, take only one channel
+            data = data[:, 0]
+        return data, sample_rate
+    except Exception as e:
+        print(f"Error reading WAV file {filename}: {e}")
+        return None, None
+    
+# def downscale_waveform(time_data, waveform_data, max_X_samples = 1000, max_Y_samples = 1000):
+#     """Downscale waveform data to fit within specified sample limits"""
+#     if len(time_data) > max_X_samples:
+#         # Downsample time data
+#         indices = np.linspace(0, len(time_data) - 1, max_X_samples).astype(int)
+#         time_data = time_data[indices]
+#         waveform_data = waveform_data[indices]
+
+#     if len(waveform_data) > max_Y_samples:
+#         # Downsample waveform data
+#         indices = np.linspace(0, len(waveform_data) - 1, max_Y_samples).astype(int)
+#         waveform_data = waveform_data[indices]
+
+#     return time_data, waveform_data
+
 def create_waveform_plot(time_data, waveform_data, emotionLabels=None, title="Audio Waveform", highlight_slice=None):
     """Create a waveform plot and return as base64 encoded image"""
     fig, ax = plt.subplots(figsize=(12, 6))
@@ -163,10 +191,18 @@ def create_waveform_plot(time_data, waveform_data, emotionLabels=None, title="Au
     ax.set_yticks([])  # Hide y-axis ticks
     ax.set_title(title)
     ax.grid(True, alpha=0.3)
-    ax.set_ylim(-1.1, 1.1)
+    # maxw, minw = np.max(np.abs(waveform_data)), np.min(np.abs(waveform_data))
+    # maxw = max(maxw, 1e-6)
+    # minw = min(minw, -1e-6)
+    # maxw = max(abs(maxw), abs(minw))
+    # minw = -maxw
+    minw, maxw = (-1.0, 1.0)  # Fixed range for better visualization
+
+    # ax.set_ylim(-1.1, 1.1)
+    ax.set_ylim(minw*1.1, maxw*1.1)
 
     x_min, x_max = ax.get_xlim()
-    print(f"x_min: {x_min}, x_max: {x_max}")
+    # print(f"x_min: {x_min}, x_max: {x_max}")
     trans = ax.transData.transform
     sliceBoundaries = []
     
@@ -224,7 +260,7 @@ def create_waveform_plot(time_data, waveform_data, emotionLabels=None, title="Au
 
 def track_recording_time():
     """Track recording time"""
-    global recording_status, recorder
+    global recording_status, recorder, recFilename
 
     if recorder.recording != True:
         recorder.start()
@@ -241,6 +277,9 @@ def track_recording_time():
     filename = f"recordings/recording_{timedatestr}.wav"
     recorder.saveToFile(filename)
     recorder.clearBuffer()  # Clear buffer after saving
+
+    # Lock recFilename and write the filename
+    recFilename = filename
 
 @app.route('/')
 def index():
@@ -259,8 +298,12 @@ def clear_waveform():
 @app.route('/start_recording', methods=['POST'])
 def start_recording():
     """Start the recording process"""
-    global recording_status, current_waveform
-    
+    global recording_status, current_waveform, waveform_json, recFilename
+
+    recFilename = None  # Reset filename for new recording
+    waveform_json = None  # Reset waveform JSON data
+    current_waveform = None  # Reset current waveform data
+
     # Clear previous waveform data when starting new recording
     current_waveform = None
     
@@ -282,12 +325,15 @@ def stop_recording():
     """Stop the recording process"""
     global recording_status
     
+
     if recording_status["is_recording"]:
         recording_status["is_recording"] = False
         final_duration = recording_status["duration"]
         return jsonify({"status": "recording_stopped", "duration": final_duration})
     else:
         return jsonify({"status": "not_recording"})
+    
+
 
 @app.route('/recording_status')
 def get_recording_status():
@@ -296,13 +342,47 @@ def get_recording_status():
 
 @app.route('/get_waveform')
 def get_waveform():
+    """Get the current waveform data"""
+    global waveform_json
+
+    if waveform_json is not None:
+        print("get_waveform(): Returning existing waveform data")
+        return waveform_json if waveform_json is not None else jsonify({"status": "not_ready"})
+    else:
+        print("get_waveform(): Computing NEW waveform data...")
+        return compute_waveform()
+
+    
+
+@app.route('/compute_waveform')
+def compute_waveform():
     """Generate and return the waveform data"""
-    global current_waveform
+    global current_waveform, waveform_json, recFilename, recording_status
+
+    print("Computing waveform...")
     
     if not recording_status["is_recording"] and recording_status["duration"] > 0:
         # Generate the sinusoid for the recorded duration
         duration = recording_status["duration"]
-        time_data, waveform_data = generate_sinusoid(duration)
+        _, waveform_data = generate_sinusoid(duration)
+        while recFilename is None:
+            print("Waiting for recording to finish...")
+            time.sleep(0.1)
+
+        print(f"Reading WAV file: {recFilename}")
+        waveform_data, sr = read_wav_file(recFilename) if recFilename else ([], [])
+        duration = len(waveform_data) / sr
+
+        time_data = np.linspace(0, duration, len(waveform_data))
+
+        # time_data, waveform_data = downscale_waveform(time_data, waveform_data, max_X_samples = 1000, max_Y_samples = 1000)
+        duration = time_data[-1] if len(time_data) > 0 else 0
+
+        # print(f"Duration of recorded audio: {duration} seconds")
+        # print(f"Number of samples: {len(waveform_data)}")
+        # print(f"Time Data: ", time_data[:10], "...")  # Print first 10 samples for debugging
+        # print(f"Waveform Data: ", waveform_data[:10], "...")  # Print first 10 samples for debugging
+
         current_waveform = (time_data, waveform_data)
         
         # Calculate number of slices
@@ -323,33 +403,22 @@ def get_waveform():
                     "width": sliceBoundaries[i][1] - sliceBoundaries[i][0],
                    } for i in range(num_slices)]
         
-        return jsonify({
+        waveform_json = jsonify({
             "status": "ready",
+            "filename": recFilename,
             "plot": plot_url,
             "duration": duration,
             "slices": slices,
         })
-    elif current_waveform is not None:
-        pass
-        # Return existing waveform data
-        # time_data, waveform_data = current_waveform
-        # duration = time_data[-1] if len(time_data) > 0 else 0
-        
-        # # Create the plot
-        # plot_url = create_waveform_plot(time_data, waveform_data)
-        
-        # # Calculate number of slices
-        # num_slices = max(1, int(np.ceil(duration / 3)))  # 3-second slices
-        
-        # emotions.randomEmotion() for _ in range(num_slices)
 
+        # Save to file
+        json_filename = os.path.splitext(recFilename)[0] + ".json"
+        with open(os.path.splitext(recFilename)[0]+".json", "w") as f:
+            f.write(waveform_json.get_data(as_text=True))
+        print(f"Waveform data computed and saved to {json_filename}")
 
-        # return jsonify({
-        #     "status": "ready",
-        #     "plot": plot_url,
-        #     "duration": duration,
-        #     "slices": [{"id": i, "label": chr(ord('A') + i)} for i in range(num_slices)]
-        # })
+        return waveform_json
+
     else:
         return jsonify({"status": "not_ready"})
 

@@ -98,7 +98,7 @@
         .slice-button {
             position: absolute;
             background-color: rgba(255, 255, 0, 0.3);
-            border: 2px solid #ffaa00;
+            border: 2px dashed black;
             cursor: pointer;
             height: 100%;
             top: 0;
@@ -152,6 +152,7 @@
         
         <div id="waveformContainer" class="waveform-container">
             <h2>Recorded Waveform - Duration: <span id="waveformDuration"></span>s (Click on a section to zoom in)</h2>
+            <h3><span id="recFilename"></span></h3>
             <div class="slice-overlay">
                 <img id="waveformImg" class="waveform-img" alt="Waveform">
                 <!-- Slice buttons will be added dynamically -->
@@ -170,6 +171,7 @@
         const waveformContainer = document.getElementById('waveformContainer');
         const waveformImg = document.getElementById('waveformImg');
         const waveformDuration = document.getElementById('waveformDuration');
+        const recFilename = document.getElementById('recFilename');
 
         let isRecording = false;
         let timerInterval;
@@ -281,7 +283,7 @@
             
             showStatus('Processing waveform...', 'recording');
             
-            fetch('/get_waveform')
+            fetch('/compute_waveform')
                 .then(response => response.json())
                 .then(data => {
                     if (data.status === 'ready') {
@@ -313,6 +315,7 @@
         function displayWaveform(data) {
             waveformImg.src = 'data:image/png;base64,' + data.plot;
             waveformDuration.textContent = data.duration.toFixed(1);
+            recFilename.textContent = data.filename || 'No filename available';
             waveformContainer.style.display = 'block';
             
             // Add clickable slice areas
