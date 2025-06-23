@@ -1,134 +1,10 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Explainable Music Emotion Recognition</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-            background-color: #f5f5f5;
-        }
-        .container {
-            background-color: white;
-            padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        .record-btn {
-            background-color: #ff4444;
-            color: white;
-            border: none;
-            padding: 15px 30px;
-            font-size: 18px;
-            border-radius: 50px;
-            cursor: pointer;
-            margin-bottom: 20px;
-            transition: background-color 0.3s;
-        }
-        .record-btn:hover {
-            background-color: #dd3333;
-        }
-        .record-btn:disabled {
-            background-color: #cccccc;
-            cursor: not-allowed;
-        }
-        .new-recording-btn {
-            background-color: #28a745;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            font-size: 16px;
-            border-radius: 5px;
-            cursor: pointer;
-            margin-left: 10px;
-            transition: background-color 0.3s;
-        }
-        .new-recording-btn:hover {
-            background-color: #218838;
-        }
-        .clear-btn {
-            background-color: #f66032;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            font-size: 16px;
-            border-radius: 5px;
-            cursor: pointer;
-            margin-left: 10px;
-            transition: background-color 0.3s;
-        }
-        .clear-btn:hover {
-            background-color: #d93a05;
-        }
-        .progress-bar {
-            width: 100%;
-            height: 20px;
-            background-color: #ddd;
-            border-radius: 10px;
-            overflow: hidden;
-            margin-bottom: 20px;
-            display: none;
-        }
-        .progress-fill {
-            height: 100%;
-            background-color: #4CAF50;
-            width: 0%;
-            transition: width 0.3s;
-        }
-        .waveform-container {
-            margin-top: 20px;
-            {% if not show_waveform %}display: none;{% endif %}
-        }
-        .waveform-img {
-            width: 100%;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-        .slice-overlay {
-            position: relative;
-            display: inline-block;
-            width: 100%;
-        }
-        .slice-button {
-            position: absolute;
-            background-color: rgba(255, 255, 0, 0.3);
-            border: 2px dashed black;
-            cursor: pointer;
-            height: 100%;
-            top: 0;
-            transition: background-color 0.3s;
-        }
-        .slice-button:hover {
-            background-color: rgba(255, 255, 0, 0.5);
-        }
-        .status {
-            margin-top: 10px;
-            padding: 10px;
-            border-radius: 5px;
-            display: none;
-        }
-        .status.recording {
-            background-color: #fff3cd;
-            border: 1px solid #ffeaa7;
-            color: #856404;
-        }
-        .status.ready {
-            background-color: #d4edda;
-            border: 1px solid #c3e6cb;
-            color: #155724;
-        }
-        .controls {
-            margin-bottom: 20px;
-            display: flex;
-            justify-content: center;
-        }
-    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
     <div class="container", style="text-align: center;">
@@ -150,9 +26,19 @@
         
         <div id="status" class="status"></div>
         
+        
         <div id="waveformContainer" class="waveform-container">
-            <h2>Recorded Waveform - Duration: <span id="waveformDuration"></span>s (Click on a section to zoom in)</h2>
-            <h3><span id="recFilename"></span></h3>
+            <!-- <h2>Recorded Waveform - Duration: <span id="waveformDuration"></span>s (Click on a section to zoom in)</h2> -->
+            <!-- <div style="width:100%; overflow: scroll;"> -->
+                <a id="recFilename" class="rec-filename-display"></a>
+            <!-- </div> -->
+            <div id="sliceStatus" class="slice-status">
+                <span id="sliceStatusText">Preparing slice views...</span>
+            </div>
+            <audio id="recPlayer" controls class="rec-player">
+                <source id="recSource" src="" type="audio/wav">
+                Your browser does not support the audio element.
+            </audio>
             <div class="slice-overlay">
                 <img id="waveformImg" class="waveform-img" alt="Waveform">
                 <!-- Slice buttons will be added dynamically -->
@@ -172,9 +58,14 @@
         const waveformImg = document.getElementById('waveformImg');
         const waveformDuration = document.getElementById('waveformDuration');
         const recFilename = document.getElementById('recFilename');
+        const sliceStatus = document.getElementById('sliceStatus');
+        const sliceStatusText = document.getElementById('sliceStatusText');
+        const recPlayer = document.getElementById('recPlayer');
+        const recSource = document.getElementById('recSource');
 
         let isRecording = false;
         let timerInterval;
+        let sliceStatusInterval;
 
         recordBtn.addEventListener('click', startRecording);
         stopBtn.addEventListener('click', stopRecording);
@@ -190,13 +81,18 @@
             if (clearBtn) clearBtn.style.display = 'none';
             waveformContainer.style.display = 'none';
             status.style.display = 'none';
-
+            sliceStatus.style.display = 'none';
+            
+            // Clear slice status interval
+            if (sliceStatusInterval) {
+                clearInterval(sliceStatusInterval);
+                sliceStatusInterval = null;
+            }
 
             fetch('/clear_waveform', { method: 'POST' })
                 .then(response => response.json())
                 .then(data => {
                     console.log('Recording cleared:', data);
-                    startTimer();
                 });
         }
 
@@ -214,6 +110,13 @@
             if (clearBtn) clearBtn.style.display = 'none';
             waveformContainer.style.display = 'none';
             status.style.display = 'none';
+            sliceStatus.style.display = 'none';
+            
+            // Clear slice status interval
+            if (sliceStatusInterval) {
+                clearInterval(sliceStatusInterval);
+                sliceStatusInterval = null;
+            }
             
             // Start new recording
             startRecording();
@@ -225,7 +128,9 @@
                 .then(data => {
                     if (data.status === 'ready') {
                         displayWaveform(data);
-                        showStatus(`Recording complete! Duration: ${data.duration.toFixed(1)}s. Click on a section to zoom in.`, 'ready');
+                        // showStatus(`Recording complete! Duration: ${data.duration.toFixed(1)}s. Click on a section to zoom in.`, 'ready');
+                        showStatus(`Recording complete!`, 'ready');
+                        startSliceStatusMonitoring();
                     }
                 });
         }
@@ -274,6 +179,42 @@
             }, 100);
         }
 
+        function startSliceStatusMonitoring() {
+            sliceStatus.style.display = 'block';
+            sliceStatusInterval = setInterval(() => {
+                fetch('/slice_status')
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.computing) {
+                            sliceStatus.className = 'slice-status computing';
+                            sliceStatusText.textContent = 'Computing detailed slice views...';
+                            updateSliceButtonsStatus('computing');
+                        } else if (data.completed) {
+                            sliceStatus.className = 'slice-status completed';
+                            sliceStatusText.textContent = 'All slice views ready! Click any section to zoom.';
+                            updateSliceButtonsStatus('ready');
+                            clearInterval(sliceStatusInterval);
+                            sliceStatusInterval = null;
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error checking slice status:', error);
+                    });
+            }, 1000);
+        }
+
+        function updateSliceButtonsStatus(status) {
+            const sliceButtons = document.querySelectorAll('.slice-button');
+            sliceButtons.forEach(btn => {
+                btn.className = `slice-button ${status}`;
+                if (status === 'computing') {
+                    btn.title = 'Computing detailed view...';
+                } else if (status === 'ready') {
+                    btn.title = 'Click to view detailed slice (precomputed)';
+                }
+            });
+        }
+
         function finishRecording() {
             clearInterval(timerInterval);
             isRecording = false;
@@ -290,6 +231,9 @@
                         displayWaveform(data);
                         showStatus(`Recording complete! Duration: ${data.duration.toFixed(1)}s. Click on a section to zoom in.`, 'ready');
                         if (clearBtn) clearBtn.style.display = 'inline-block';
+                        
+                        // Start monitoring slice computation
+                        startSliceStatusMonitoring();
                         
                         // Show "New Recording" button
                         if (!newRecordingBtn) {
@@ -314,9 +258,15 @@
 
         function displayWaveform(data) {
             waveformImg.src = 'data:image/png;base64,' + data.plot;
-            waveformDuration.textContent = data.duration.toFixed(1);
+            if (waveformDuration)
+                waveformDuration.textContent = data.duration.toFixed(1);
             recFilename.textContent = data.filename || 'No filename available';
             waveformContainer.style.display = 'block';
+
+            recPlayer.style.display = 'block';
+            recSource.src = data.audio_url || '';
+            recPlayer.load();
+            recPlayer.style.display = 'inline-block';
             
             // Add clickable slice areas
             const overlay = document.querySelector('.slice-overlay');
@@ -327,15 +277,13 @@
             
             // Add new slice buttons based on actual duration
             const numSlices = data.slices.length;
-            const sliceWidth = 100 / numSlices; // Equal width for each slice
             
             for (let i = 0; i < numSlices; i++) {
                 const sliceBtn = document.createElement('div');
                 sliceBtn.className = 'slice-button';
-                sliceBtn.style.backgroundColor = addAlpha(data.slices[i].color,0.2) || 'rgba(255, 255, 0, 0.3)';
-                // Hover background color
-                sliceBtn.style.left = data.slices[i].left*100 + '%' //(i * sliceWidth) + '%';
-                sliceBtn.style.width = data.slices[i].width*100 + '%'  //sliceWidth + '%';
+                sliceBtn.style.backgroundColor = addAlpha(data.slices[i].color, 0.2) || 'rgba(255, 255, 0, 0.3)';
+                sliceBtn.style.left = data.slices[i].left * 100 + '%';
+                sliceBtn.style.width = data.slices[i].width * 100 + '%';
                 sliceBtn.title = `Click to view slice ${data.slices[i].label}`;
                 sliceBtn.addEventListener('click', () => {
                     window.location.href = `/slice/${i}`;
@@ -343,7 +291,9 @@
 
                 // Add event listener for hover effect
                 sliceBtn.addEventListener('mouseover', () => {
-                    sliceBtn.style.backgroundColor = addAlpha(data.slices[i].color, 0.5);
+                    if (!sliceBtn.classList.contains('computing')) {
+                        sliceBtn.style.backgroundColor = addAlpha(data.slices[i].color, 0.5);
+                    }
                 });
                 sliceBtn.addEventListener('mouseout', () => {
                     sliceBtn.style.backgroundColor = addAlpha(data.slices[i].color, 0.2);

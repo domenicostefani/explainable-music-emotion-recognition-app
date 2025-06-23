@@ -125,7 +125,8 @@ if not playback:
     raise RuntimeError('No physical playback ports')
 
 for jackAudioOut in playback:
-    client.connect(client.outports[0], jackAudioOut)
+    if not "midi" in jackAudioOut.name.lower():
+        client.connect(client.outports[0], jackAudioOut)
 
 
 
@@ -181,14 +182,16 @@ def read_wav_file(filename):
 
 #     return time_data, waveform_data
 
-def create_waveform_plot(time_data, waveform_data, emotionLabels=None, title="Audio Waveform", highlight_slice=None):
+def create_waveform_plot(time_data, waveform_data, emotionLabels=None, emotionProbabilities=None, title="Audio Waveform", highlight_slice=None,figure_size=(12, 6)):
     """Create a waveform plot and return as base64 encoded image"""
-    fig, ax = plt.subplots(figsize=(12, 6))
+    fig, ax = plt.subplots(figsize=figure_size)
     ax.plot(time_data, waveform_data, 'b-', linewidth=0.5)
     ax.set_xlabel('Time (seconds)')
-    # plt.ylabel('Amplitude')
-    # Remove yticks
-    ax.set_yticks([])  # Hide y-axis ticks
+    if highlight_slice is not None:
+        plt.ylabel('Amplitude')
+    else:
+        # Remove yticks
+        ax.set_yticks([])  # Hide y-axis ticks
     ax.set_title(title)
     ax.grid(True, alpha=0.3)
     # maxw, minw = np.max(np.abs(waveform_data)), np.min(np.abs(waveform_data))
@@ -207,10 +210,13 @@ def create_waveform_plot(time_data, waveform_data, emotionLabels=None, title="Au
     sliceBoundaries = []
     
     if emotionLabels is not None:
+        assert emotionProbabilities is not None, "Emotion probabilities must be provided if emotion labels are given"
+        assert len(emotionLabels) == len(emotionProbabilities), "Emotion labels and probabilities must have the same length"
         # get pixel boundaries for each emotion label
         right_bound_pixel, _ = trans((x_max, 0))
         left_bound_pixel, _ = trans((x_min, 0))
-        for i, label in enumerate(emotionLabels):
+        for i, (label, probabilities) in enumerate(zip(emotionLabels, emotionProbabilities)):
+            assert len(probabilities) == len(emotions.EMOTIONS), "Probabilities must match the number of emotions"
             time_left = i * 3  # 3 seconds per slice
             time_right = (i + 1) * 3
             slice_left, _ = trans((time_left, 0))
@@ -258,6 +264,47 @@ def create_waveform_plot(time_data, waveform_data, emotionLabels=None, title="Au
     
     return plot_url, sliceBoundaries
 
+def create_spectrogram_plot(time_data, waveform_data, sample_rate, title="Spectrogram", figure_size=(12, 6)):
+    """Create a Spectrogram plot and return as base64 encoded image"""
+    fig, ax = plt.subplots(figsize=figure_size)
+    # Compute a MEL spectrogram with librosa
+    S = librosa.feature.melspectrogram(y=waveform_data, sr=sample_rate, n_mels=128, fmax=20000)
+    S_dB = librosa.power_to_db(S, ref=np.max)
+    img = librosa.display.specshow(S_dB, sr=sample_rate, x_axis='time', y_axis='mel', ax=ax, cmap='magma')
+    ax.set_title(title)
+    ax.set_xlabel('Time (seconds)')
+    ax.set_ylabel('Frequency (Hz)')
+    # plt.colorbar(img, ax=ax, format='%+2.0f dB')
+
+    print(f"Time data : {time_data[:3]}...{time_data[-4:]}")  # Print first 10 time data points for debugging
+    
+    zerobased_time = time_data - time_data[0]  # Adjust time to start from 0
+
+
+
+    XAX_FACTOR = 6.0
+    ax.set_xticks(zerobased_time[::int(len(zerobased_time)/XAX_FACTOR)])  # Show 10 ticks
+    ax.set_xticklabels([f"{t:.1f}" for t in time_data[::int(len(time_data)/XAX_FACTOR)]], rotation=45)
+
+    print(f"zerobased_time : {zerobased_time[:3]}...{zerobased_time[-4:]}")  # Print first 10 time data points for debugging
+    print(f"len(zerobased_time): {len(zerobased_time)}")  # Print length of time data for debugging
+    print(f"zerobased_time cut = {zerobased_time[::int(len(zerobased_time)/XAX_FACTOR)]}")  # Print first 10 ticks for debugging
+
+    plt.tight_layout()
+
+    # Convert plot to base64 string
+    img = io.BytesIO()
+    plt.savefig(img, format='png', dpi=100, bbox_inches='tight')
+    img.seek(0)
+    plot_url = base64.b64encode(img.getvalue()).decode()
+
+    plt.close()
+
+    print(f"Plot url is: {plot_url[:50]}...")  # Print first 50 characters for debugging
+
+    return plot_url
+
+
 def track_recording_time():
     """Track recording time"""
     global recording_status, recorder, recFilename
@@ -287,13 +334,6 @@ def index():
     show_waveform = current_waveform is not None and not recording_status["is_recording"]
     return render_template('index.html', show_waveform=show_waveform)
 
-@app.route('/clear_waveform', methods=['POST'])
-def clear_waveform():
-    """Clear the current waveform data"""
-    global current_waveform
-    current_waveform = None
-
-    return jsonify({"status": "ready"})
 
 @app.route('/start_recording', methods=['POST'])
 def start_recording():
@@ -352,8 +392,130 @@ def get_waveform():
         print("get_waveform(): Computing NEW waveform data...")
         return compute_waveform()
 
-    
+   
+# Create templates directory and HTML files
+import os
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
+
+
+# Add these modifications to your existing Flask app
+
+import threading
+import json
+
+# Global variables for slice management
+slice_waveforms = {}  # Store precomputed slice data
+slice_computation_status = {"computing": False, "completed": False}
+
+def precompute_slice_waveforms(time_data, waveform_data, emotion_labels, filename_base, emotion_probabilities):
+    """Precompute all slice waveforms in a background thread"""
+    global slice_waveforms, slice_computation_status
+    
+    slice_computation_status["computing"] = True
+    slice_computation_status["completed"] = False
+    slice_waveforms = {}  # Clear existing data
+    
+    try:
+        slice_duration = 3  # seconds
+        sample_rate = 48000  # Assuming 48kHz sample rate
+        duration = time_data[-1] if len(time_data) > 0 else 0
+        num_slices = int(math.floor(duration / slice_duration))
+        
+        print(f"Precomputing {num_slices} slice waveforms and spectrograms ...")
+        
+        for slice_id in range(num_slices):
+            print(f"Computing slice {slice_id + 1}/{num_slices}")
+            
+            # Calculate slice boundaries (same logic as original view_slice)
+            start_sample = int(slice_id * slice_duration * sample_rate)
+            end_sample = int(min((slice_id + 1) * slice_duration * sample_rate, len(time_data)))
+            
+            # Ensure we don't go out of bounds
+            start_sample = min(start_sample, len(time_data) - 1)
+            end_sample = min(end_sample, len(time_data))
+            
+            if start_sample >= end_sample:
+                continue
+                
+            # Extract slice data
+            slice_time = time_data[start_sample:end_sample+1]
+            slice_waveform = waveform_data[start_sample:end_sample+1]
+            
+            if len(slice_time) == 0:
+                continue
+                
+            
+            # Create zoomed plot
+            slice_label = emotion_labels[slice_id] if slice_id < len(emotion_labels) else f"Slice {slice_id}"
+            plot_url, _ = create_waveform_plot(
+                slice_time, 
+                slice_waveform, 
+                title=f"Audio Waveform - {slice_label} (Zoomed)",
+                highlight_slice=True,
+                figure_size=(7, 6)
+            )
+
+            spec_url = create_spectrogram_plot(
+                slice_time,
+                slice_waveform, 
+                48000,  # Assuming 48kHz sample rate
+                title=f"Spectrogram - {slice_label}",
+                figure_size=(7, 6)
+            )
+            
+            # Store the precomputed data
+            slice_waveforms[slice_id] = {
+                "slice_id": slice_id,
+                "slice_label": slice_label,
+                "plot_url": plot_url,
+                "spec_url": spec_url,
+                "time_data": slice_time.tolist(),
+                "waveform_data": slice_waveform.tolist(),
+                "duration": slice_time[-1] if len(slice_time) > 0 else 0
+            }
+        
+        # Save precomputed slices to file
+        slices_filename = f"{filename_base}_slices.json"
+        with open(slices_filename, 'w') as f:
+            # Convert numpy arrays to lists for JSON serialization
+            serializable_data = {}
+            for slice_id, data in slice_waveforms.items():
+                serializable_data[str(slice_id)] = {
+                    "slice_id": data["slice_id"],
+                    "slice_label": data["slice_label"],
+                    "plot_url": data["plot_url"],
+                    "duration": data["duration"]
+                    # Note: not saving time_data and waveform_data to keep file size manageable
+                }
+            json.dump(serializable_data, f, indent=2)
+        
+        print(f"Slice waveforms precomputed and saved to {slices_filename}")
+        
+    except Exception as e:
+        print(f"Error precomputing slice waveforms: {e}")
+    finally:
+        slice_computation_status["computing"] = False
+        slice_computation_status["completed"] = True
+
+from flask import send_file
+
+@app.route('/recordings/<filename>')
+def serve_audio(filename):
+    """Serve audio files from the recordings directory"""
+    # Make sure to validate the filename for security
+    if not filename.endswith('.wav'):
+        return "Invalid file type", 400
+    
+    # Construct the full path (adjust this to your actual recording directory)
+    audio_path = os.path.join('recordings', filename)
+    
+    if not os.path.exists(audio_path):
+        return "File not found", 404
+    
+    return send_file(audio_path, mimetype='audio/wav')
+
+# Modify the compute_waveform function
 @app.route('/compute_waveform')
 def compute_waveform():
     """Generate and return the waveform data"""
@@ -363,8 +525,8 @@ def compute_waveform():
     
     if not recording_status["is_recording"] and recording_status["duration"] > 0:
         # Generate the sinusoid for the recorded duration
-        duration = recording_status["duration"]
-        _, waveform_data = generate_sinusoid(duration)
+        # duration = recording_status["duration"]
+        # _, waveform_data = generate_sinusoid(duration)
         while recFilename is None:
             print("Waiting for recording to finish...")
             time.sleep(0.1)
@@ -374,58 +536,98 @@ def compute_waveform():
         duration = len(waveform_data) / sr
 
         time_data = np.linspace(0, duration, len(waveform_data))
-
-        # time_data, waveform_data = downscale_waveform(time_data, waveform_data, max_X_samples = 1000, max_Y_samples = 1000)
         duration = time_data[-1] if len(time_data) > 0 else 0
-
-        # print(f"Duration of recorded audio: {duration} seconds")
-        # print(f"Number of samples: {len(waveform_data)}")
-        # print(f"Time Data: ", time_data[:10], "...")  # Print first 10 samples for debugging
-        # print(f"Waveform Data: ", waveform_data[:10], "...")  # Print first 10 samples for debugging
 
         current_waveform = (time_data, waveform_data)
         
         # Calculate number of slices
         num_slices = int(math.floor(duration / 3))  # 3-second slices
         # Create the plot
-        emotionLabels = [emotions.randomEmotion() for _ in range(num_slices)]
-        plot_url, sliceBoundaries = create_waveform_plot(time_data, waveform_data, emotionLabels)
-        
+        random_emotions = [emotions.randomEmotion() for _ in range(num_slices)]
+        # Now random emotions contain tuples of (emotion, probabilities)
+        emotionLabels = [emotion[0] for emotion in random_emotions]
+        emotionProbabilities = [emotion[1] for emotion in random_emotions]
+        print(f"Emotion labels: {emotionLabels}")
+        print(f"Emotion probabilities: {emotionProbabilities}")
 
+        plot_url, sliceBoundaries = create_waveform_plot(time_data, waveform_data, emotionLabels, emotionProbabilities)
+        
         colors = [emotions.EMOTIONS_TO_COLOR[label] for label in emotionLabels]
 
         slices = [{
                     "id": i, 
                     "label": emotionLabels[i],
+                    "probabilities": emotionProbabilities[i],
                     "color": colors[i],
                     "left": sliceBoundaries[i][0],
                     "right": sliceBoundaries[i][1],
                     "width": sliceBoundaries[i][1] - sliceBoundaries[i][0],
                    } for i in range(num_slices)]
         
+        # Return an audio_url that can be played in an audio player in html
+        audio_url = f"/recordings/{os.path.basename(recFilename)}"
+
+        # Now Spectrogram with same fig_size 
+        # spectrogram_url = create_spectrogram_plot(waveform_data, sr, title="Spectrogram of Recorded Audio", figure_size=(12, 6))
+        
         waveform_json = jsonify({
             "status": "ready",
-            "filename": recFilename,
+            "filename": os.path.basename(recFilename),
             "plot": plot_url,
             "duration": duration,
             "slices": slices,
+            "audio_url": audio_url,
         })
 
         # Save to file
         json_filename = os.path.splitext(recFilename)[0] + ".json"
-        with open(os.path.splitext(recFilename)[0]+".json", "w") as f:
+        with open(json_filename, "w") as f:
             f.write(waveform_json.get_data(as_text=True))
         print(f"Waveform data computed and saved to {json_filename}")
+
+        # Start precomputing slice waveforms in background
+        filename_base = os.path.splitext(recFilename)[0]
+        slice_thread = threading.Thread(
+            target=precompute_slice_waveforms, 
+            args=(time_data, waveform_data, emotionLabels, filename_base,emotionProbabilities)
+        )
+        slice_thread.daemon = True
+        slice_thread.start()
+        print("Started background slice precomputation")
 
         return waveform_json
 
     else:
         return jsonify({"status": "not_ready"})
 
+# Add new route to check slice computation status
+@app.route('/slice_status')
+def get_slice_status():
+    """Get slice computation status"""
+    return jsonify(slice_computation_status)
+
+# Modify the existing slice route to use precomputed data
 @app.route('/slice/<int:slice_id>')
 def view_slice(slice_id):
-    """View a specific 3-second slice"""
-    global current_waveform
+    """View a specific 3-second slice using precomputed data"""
+    global slice_waveforms, current_waveform
+    
+    # Check if we have precomputed data
+    if slice_id in slice_waveforms:
+        print(f"Using precomputed data for slice {slice_id}")
+        slice_data = slice_waveforms[slice_id]
+        return render_template('slice.html', 
+                             slice_label=slice_data["slice_label"],
+                             slice_id=slice_id,
+                             plot=slice_data["plot_url"],
+                             spectrogram=slice_data["spec_url"],
+                             audio_url=f"/recordings/{os.path.basename(recFilename)}",
+                             slice_start=round(slice_data["time_data"][0],2),
+                             slice_end=round(slice_data["time_data"][-1],2),
+        )
+    
+    # Fallback to original computation if precomputed data not available
+    print(f"Precomputed data not available for slice {slice_id}, computing on-demand")
     
     if current_waveform is None:
         return "No waveform data available", 404
@@ -441,14 +643,12 @@ def view_slice(slice_id):
     # Extract slice data
     slice_time = time_data[start_sample:end_sample]
     slice_waveform = waveform_data[start_sample:end_sample]
-    
-    # Adjust time to start from 0 for the slice
-    slice_time_adjusted = slice_time - slice_time[0]
+
     
     # Create zoomed plot
     slice_label = chr(ord('A') + slice_id)
-    plot_url,_ = create_waveform_plot(
-        slice_time_adjusted, 
+    plot_url, _ = create_waveform_plot(
+        slice_time, 
         slice_waveform, 
         title=f"Audio Waveform - Slice {slice_label} (Zoomed)",
         highlight_slice=True
@@ -459,14 +659,30 @@ def view_slice(slice_id):
                          slice_id=slice_id,
                          plot=plot_url)
 
-# Create templates directory and HTML files
-import os
-os.chdir(os.path.dirname(os.path.abspath(__file__)))
+# Add route to get precomputed slice data (for AJAX requests)
+@app.route('/api/slice/<int:slice_id>')
+def get_slice_data(slice_id):
+    """Get precomputed slice data as JSON"""
+    if slice_id in slice_waveforms:
+        return jsonify(slice_waveforms[slice_id])
+    else:
+        return jsonify({"error": "Slice data not available"}), 404
 
+# Modify the clear_waveform route to also clear slice data
+@app.route('/clear_waveform', methods=['POST'])
+def clear_waveform():
+    """Clear the current waveform data and slice data"""
+    global current_waveform, slice_waveforms, slice_computation_status
+    
+    current_waveform = None
+    slice_waveforms = {}
+    slice_computation_status = {"computing": False, "completed": False}
 
+    return jsonify({"status": "ready"})
 
 if __name__ == '__main__':
     # Create templates before running the app
     print("Flask app starting...")
     print("Open http://localhost:5000 in your browser")
     app.run(debug=True)
+
