@@ -39,6 +39,18 @@
                 <source id="recSource" src="" type="audio/wav">
                 Your browser does not support the audio element.
             </audio>
+
+
+            <div id="overallEmotion" class="overall-emotion">
+                <div>Overall Emotion: <span id="overallEmotionText"></span></div>
+                <div class="box-vert-flex">
+                    <span id="prob_emo0"></span>
+                    <span id="prob_emo1"></span>
+                    <span id="prob_emo2"></span>
+                    <span id="prob_emo3"></span>
+                </div>
+            </div>
+
             <div class="slice-overlay">
                 <img id="waveformImg" class="waveform-img" alt="Waveform">
                 <!-- Slice buttons will be added dynamically -->
@@ -62,6 +74,13 @@
         const sliceStatusText = document.getElementById('sliceStatusText');
         const recPlayer = document.getElementById('recPlayer');
         const recSource = document.getElementById('recSource');
+        const overallEmotionText = document.getElementById('overallEmotionText');
+        const overallEmotionProbs = [
+            document.getElementById('prob_emo0'),
+            document.getElementById('prob_emo1'),
+            document.getElementById('prob_emo2'),
+            document.getElementById('prob_emo3')
+        ];
 
         let isRecording = false;
         let timerInterval;
@@ -129,7 +148,7 @@
                     if (data.status === 'ready') {
                         displayWaveform(data);
                         // showStatus(`Recording complete! Duration: ${data.duration.toFixed(1)}s. Click on a section to zoom in.`, 'ready');
-                        showStatus(`Recording complete!`, 'ready');
+                        // showStatus(`Recording complete!`, 'ready');
                         startSliceStatusMonitoring();
                     }
                 });
@@ -234,6 +253,7 @@
                         
                         // Start monitoring slice computation
                         startSliceStatusMonitoring();
+
                         
                         // Show "New Recording" button
                         if (!newRecordingBtn) {
@@ -246,6 +266,8 @@
                         } else {
                             newRecordingBtn.style.display = 'inline-block';
                         }
+
+                        showStatus(`Recording complete!`, 'ready');
                     }
                 });
         }
@@ -257,6 +279,7 @@
         }
 
         function displayWaveform(data) {
+            console.log('Displaying waveform data:', data);
             waveformImg.src = 'data:image/png;base64,' + data.plot;
             if (waveformDuration)
                 waveformDuration.textContent = data.duration.toFixed(1);
@@ -267,6 +290,23 @@
             recSource.src = data.audio_url || '';
             recPlayer.load();
             recPlayer.style.display = 'inline-block';
+
+            status.style.display = 'none';
+
+            emotionPrint = data.overall_emotion.charAt(0).toUpperCase() + data.overall_emotion.slice(1);
+            overallEmotionText.textContent = `${emotionPrint || 'Unknown'}`;
+            console.log('Overall Emotion Text set to :', overallEmotionText.textContent);
+            counter = 0;
+            for (const [emotion, prob] of Object.entries(data.overall_probabilities || {})) {
+                // First letter of emotion capitalized
+                emotionPrint = emotion.charAt(0).toUpperCase() + emotion.slice(1);
+                let probString = `${emotionPrint}: ${(prob * 100).toFixed(2)}%`;
+                overallEmotionProbs[counter].textContent = `${probString || 'N/A'}`;
+                counter++;    
+            }
+            
+            // overallEmotionProbs.textContent = `Probabilities: ${data.overall_probabilities ? JSON.stringify(data.overall_probabilities) : 'N/A'}`;
+            
             
             // Add clickable slice areas
             const overlay = document.querySelector('.slice-overlay');

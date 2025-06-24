@@ -10,6 +10,9 @@ import threading
 from datetime import datetime
 import emotions, math, jack, soundfile as sf, librosa
 
+CLASSIFIER_SR = 22050  # Sample rate for classifier
+HIGHRES_SR = 48000  # Sample rate for high-resolution audio
+
 
 class MonoAudioRecorder:
     def __init__(self):
@@ -42,7 +45,7 @@ class MonoAudioRecorder:
         if self.buffer:
             audio_data = np.array(self.buffer, dtype=np.float32)
             
-            sf.write(filename, audio_data, 48000, subtype='PCM_16')
+            sf.write(filename, audio_data, HIGHRES_SR, subtype='PCM_16')
             print(f"Audio saved to {filename}")
         else:
             print("No audio data to save.")
@@ -53,11 +56,6 @@ class MonoAudioRecorder:
 
 recorder = MonoAudioRecorder()
 recFilename = None # To be locked and written from different threads
-
-
-
-
-
 
 
 app = Flask(__name__)
@@ -86,7 +84,7 @@ def process(frames):
 
     inbufnp = np.frombuffer(inbuf, dtype=np.float32)
 
-    inbufnp*= 6.0
+    # inbufnp*= 6.0 # Amplify the input signal by 6x
     recorder.process(inbufnp)  # Process the input buffer
 
     outbuf = memoryview(out1.get_buffer()).cast('f')
@@ -138,28 +136,34 @@ current_waveform = None
 waveform_json = None
 recording_status = {"is_recording": False, "duration": 0, "start_time": None}
 
-def generate_sinusoid(duration):
-    """Generate a sinusoid for the specified duration at 48kHz sample rate"""
-    sample_rate = 48000  # Hz
-    frequency = 20  # Hz (A4 note)
+# def generate_sinusoid(duration, sample_rate=None):
+#     """Generate a sinusoid for the specified duration at 48kHz sample rate"""
+#     sample_rate = HIGHRES_SR  # Hz
+#     frequency = 20  # Hz (A4 note)
     
-    # Generate time array
-    t = np.linspace(0, duration, int(sample_rate * duration), False)
+#     # Generate time array
+#     t = np.linspace(0, duration, int(sample_rate * duration), False)
     
-    # Generate sinusoid with some modulation to make it more interesting
-    waveform = np.sin(2 * np.pi * frequency * t) * np.exp(-t/20)  # Decaying sinusoid
-    waveform += 0.3 * np.sin(2 * np.pi * frequency * 2 * t)  # Add harmonic
+#     # Generate sinusoid with some modulation to make it more interesting
+#     waveform = np.sin(2 * np.pi * frequency * t) * np.exp(-t/20)  # Decaying sinusoid
+#     waveform += 0.3 * np.sin(2 * np.pi * frequency * 2 * t)  # Add harmonic
     
-    # Normalize to [-1, 1]
-    if len(waveform) > 0:
-        waveform = waveform / np.max(np.abs(waveform))
+#     # Normalize to [-1, 1]
+#     if len(waveform) > 0:
+#         waveform = waveform / np.max(np.abs(waveform))
     
-    return t, waveform
+#     return t, waveform
 
-def read_wav_file(filename):
+def read_wav_file(filename, sample_rate=None):
     """Read a WAV file and return time and waveform data"""
     try:
-        data, sample_rate = sf.read(filename, dtype='float32')
+        if sample_rate is None:
+            # data, sample_rate = sf.read(filename, dtype='float32')
+            data, sample_rate = librosa.load(filename, sr=None, mono=True, dtype='float32')
+        else :
+            # data, sample_rate = sf.read(filename, dtype='float32', samplerate=sample_rate)
+            data, sample_rate = librosa.load(filename, sr=sample_rate, mono=True, dtype='float32')
+
         if len(data.shape) > 1:  # If stereo, take only one channel
             data = data[:, 0]
         return data, sample_rate
@@ -246,7 +250,7 @@ def create_waveform_plot(time_data, waveform_data, emotionLabels=None, emotionPr
                 slice_start = i * slice_duration
                 slice_center = slice_start + slice_duration / 2
                 if slice_center < duration:
-                    label = emotionLabels[i] if emotionLabels else ""
+                    label = emotionLabels[i]+" %.1f%%"%(emotionProbabilities[i][emotionLabels[i]]*100) if emotionLabels else ""
                     facecolor = emotions.EMOTIONS_TO_COLOR[label] if label in emotions.EMOTIONS_TO_COLOR else 'lightgrey'
                     plt.text(slice_center, 0.9, label, ha='center', va='center', 
                             bbox=dict(boxstyle="round,pad=0.3", facecolor=facecolor, alpha=0.7),
@@ -393,10 +397,11 @@ def get_waveform():
         return compute_waveform()
 
    
-# Create templates directory and HTML files
 import os
-os.chdir(os.path.dirname(os.path.abspath(__file__)))
+os.chdir(os.path.dirname(os.path.abspath(__file__))) # Change to the directory where this script is located
 
+
+emotionClassifier = emotions.EmotionClassifier(model_path='../classifier/best_model_1_acc_53.14.h5') # Relative to the previous chdir
 
 
 # Add these modifications to your existing Flask app
@@ -418,7 +423,7 @@ def precompute_slice_waveforms(time_data, waveform_data, emotion_labels, filenam
     
     try:
         slice_duration = 3  # seconds
-        sample_rate = 48000  # Assuming 48kHz sample rate
+        sample_rate = HIGHRES_SR  # Assuming 48kHz sample rate
         duration = time_data[-1] if len(time_data) > 0 else 0
         num_slices = int(math.floor(duration / slice_duration))
         
@@ -448,6 +453,7 @@ def precompute_slice_waveforms(time_data, waveform_data, emotion_labels, filenam
             
             # Create zoomed plot
             slice_label = emotion_labels[slice_id] if slice_id < len(emotion_labels) else f"Slice {slice_id}"
+            slice_emotion_probabilities = emotion_probabilities[slice_id] if slice_id < len(emotion_probabilities) else None
             plot_url, _ = create_waveform_plot(
                 slice_time, 
                 slice_waveform, 
@@ -459,7 +465,7 @@ def precompute_slice_waveforms(time_data, waveform_data, emotion_labels, filenam
             spec_url = create_spectrogram_plot(
                 slice_time,
                 slice_waveform, 
-                48000,  # Assuming 48kHz sample rate
+                HIGHRES_SR,  # Assuming 48kHz sample rate
                 title=f"Spectrogram - {slice_label}",
                 figure_size=(7, 6)
             )
@@ -472,7 +478,8 @@ def precompute_slice_waveforms(time_data, waveform_data, emotion_labels, filenam
                 "spec_url": spec_url,
                 "time_data": slice_time.tolist(),
                 "waveform_data": slice_waveform.tolist(),
-                "duration": slice_time[-1] if len(slice_time) > 0 else 0
+                "duration": slice_time[-1] if len(slice_time) > 0 else 0,
+                "emotion_probabilities": slice_emotion_probabilities
             }
         
         # Save precomputed slices to file
@@ -485,7 +492,8 @@ def precompute_slice_waveforms(time_data, waveform_data, emotion_labels, filenam
                     "slice_id": data["slice_id"],
                     "slice_label": data["slice_label"],
                     "plot_url": data["plot_url"],
-                    "duration": data["duration"]
+                    "duration": data["duration"],
+                    "emotion_probabilities": data["emotion_probabilities"],
                     # Note: not saving time_data and waveform_data to keep file size manageable
                 }
             json.dump(serializable_data, f, indent=2)
@@ -532,7 +540,9 @@ def compute_waveform():
             time.sleep(0.1)
 
         print(f"Reading WAV file: {recFilename}")
-        waveform_data, sr = read_wav_file(recFilename) if recFilename else ([], [])
+        waveform_data, sr = read_wav_file(recFilename, sample_rate=HIGHRES_SR) if recFilename else ([], [])
+        assert waveform_data is not None, "Waveform data must not be None"
+        assert len(waveform_data) > 0, "Waveform data must not be empty"
         duration = len(waveform_data) / sr
 
         time_data = np.linspace(0, duration, len(waveform_data))
@@ -543,12 +553,37 @@ def compute_waveform():
         # Calculate number of slices
         num_slices = int(math.floor(duration / 3))  # 3-second slices
         # Create the plot
-        random_emotions = [emotions.randomEmotion() for _ in range(num_slices)]
+        # random_emotions = [emotions.randomEmotion() for _ in range(num_slices)]
+
+        lores_waveform_data, _ = read_wav_file(recFilename, CLASSIFIER_SR) if recFilename else ([], [])
+        assert lores_waveform_data is not None, "Low-resolution waveform data must not be None"
+        assert len(lores_waveform_data) > 0, "Low-resolution waveform data must not be empty"
+
+        mel_segments, audio_segments, _ = emotions.split_song(lores_waveform_data,
+                                                              sampling_rate=CLASSIFIER_SR,
+                                                              segment_duration_s=3,
+                                                              overlap=0)
+        pred_segment_emotions = []
+        for mel_rgb_batch in mel_segments:
+            # Predict emotions using the classifier
+            pred_emotion_label, pred_probabilities = emotionClassifier.predict_segment(mel_rgb_batch)
+            # print('shape of pred_emotion_label:', np.shape(pred_emotion_label))
+            # print('shape of pred_probabilities:', np.shape(pred_probabilities))
+            print("", flush=True)
+
+            pred_emotions_dict = {emotion: prob for emotion, prob in zip(emotions.EMOTIONS, pred_probabilities)}
+
+            pred_segment_emotions.append((pred_emotion_label, pred_emotions_dict))  # Store both emotion and probabilities
+        
+        overall_emotion, overall_probabilities = emotionClassifier.majority_vote([e[1] for e in pred_segment_emotions])
+        print(f"Overall emotion: {overall_emotion}, Probabilities: {overall_probabilities}")
+
+
         # Now random emotions contain tuples of (emotion, probabilities)
-        emotionLabels = [emotion[0] for emotion in random_emotions]
-        emotionProbabilities = [emotion[1] for emotion in random_emotions]
-        print(f"Emotion labels: {emotionLabels}")
-        print(f"Emotion probabilities: {emotionProbabilities}")
+        emotionLabels = [emotion[0] for emotion in pred_segment_emotions]
+        emotionProbabilities = [emotion[1] for emotion in pred_segment_emotions]
+        # print(f"Emotion labels: {emotionLabels}")
+        # print(f"Emotion probabilities: {emotionProbabilities}")
 
         plot_url, sliceBoundaries = create_waveform_plot(time_data, waveform_data, emotionLabels, emotionProbabilities)
         
@@ -577,6 +612,8 @@ def compute_waveform():
             "duration": duration,
             "slices": slices,
             "audio_url": audio_url,
+            "overall_emotion": overall_emotion,
+            "overall_probabilities": overall_probabilities,
         })
 
         # Save to file
@@ -624,6 +661,7 @@ def view_slice(slice_id):
                              audio_url=f"/recordings/{os.path.basename(recFilename)}",
                              slice_start=round(slice_data["time_data"][0],2),
                              slice_end=round(slice_data["time_data"][-1],2),
+                             emotion_probabilities=slice_data["emotion_probabilities"],
         )
     
     # Fallback to original computation if precomputed data not available
@@ -634,7 +672,7 @@ def view_slice(slice_id):
     
     time_data, waveform_data = current_waveform
     slice_duration = 3  # seconds
-    sample_rate = 48000
+    sample_rate = HIGHRES_SR
     
     # Calculate slice boundaries
     start_sample = slice_id * slice_duration * sample_rate
