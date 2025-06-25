@@ -1,0 +1,11 @@
+
+
+@font-face {
+    font-family: 'youngserif';
+    src: url('youngserif-regular.eot');
+    src: url('youngserif-regular.eot?#iefix') format('embedded-opentype'),
+         url('youngserif-regular.svg#youngserifregular') format('svg');
+    font-weight: normal;
+    font-style: normal;
+
+}

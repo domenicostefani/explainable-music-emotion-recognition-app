@@ -13,22 +13,55 @@
         <a href="/" class="back-btn">&larr; Back</a>
         
         <div class="slice-info">
-            <h1>Slice #{{ slice_id }}</h1> <!-- - Detailed View -->
-            <h2>Emotion: <span id="emoLabel"></span></h2>
+            <div class="slice-title">
+                <h1>Slice #{{ slice_id }}</h1>
+                <span>({{ slice_start }} - {{ slice_end }} seconds)</span>
+            </div>
+            <h3>This slice was classified: <span id="emoLabel" style="font-weight: bold;"></span></h3>
 
             <div id="overallEmotion" class="overall-emotion">
-                <div class="box-vert-flex">
-                    <span id="prob_emo0"></span>
-                    <span id="prob_emo1"></span>
-                    <span id="prob_emo2"></span>
-                    <span id="prob_emo3"></span>
+                <div class="emotion-display">
+                    <!-- <div class="box-vert-flex">
+                        <span id="prob_emo0"></span>
+                        <span id="prob_emo1"></span>
+                        <span id="prob_emo2"></span>
+                        <span id="prob_emo3"></span>
+                    </div> -->
+                    
+                    <div class="bar-chart-container">
+                        <div class="bar-chart">
+                            <div class="bar-item">
+                                <div class="bar-label" id="bar_label_0">Emotion 1</div>
+                                <div class="bar-background">
+                                    <div class="bar-fill emotion-0" id="bar_fill_0" style="width: 0%"></div>
+                                    <div class="bar-percentage" id="bar_percentage_0">0%</div>
+                                </div>
+                            </div>
+                            <div class="bar-item">
+                                <div class="bar-label" id="bar_label_1">Emotion 2</div>
+                                <div class="bar-background">
+                                    <div class="bar-fill emotion-1" id="bar_fill_1" style="width: 0%"></div>
+                                    <div class="bar-percentage" id="bar_percentage_1">0%</div>
+                                </div>
+                            </div>
+                            <div class="bar-item">
+                                <div class="bar-label" id="bar_label_2">Emotion 3</div>
+                                <div class="bar-background">
+                                    <div class="bar-fill emotion-2" id="bar_fill_2" style="width: 0%"></div>
+                                    <div class="bar-percentage" id="bar_percentage_2">0%</div>
+                                </div>
+                            </div>
+                            <div class="bar-item">
+                                <div class="bar-label" id="bar_label_3">Emotion 4</div>
+                                <div class="bar-background">
+                                    <div class="bar-fill emotion-3" id="bar_fill_3" style="width: 0%"></div>
+                                    <div class="bar-percentage" id="bar_percentage_3">0%</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
-            <p>{{ slice_start }}s-{{ slice_end }}s</p>
-            <!-- <p>This shows a zoomed view of the 3-second audio slice labeled "{{ slice_label }}".</p> -->
-            <!-- <p><strong>Slice ID:</strong> {{ slice_id }}</p> -->
-
-            <!-- <p><strong>Start Time:</strong> {{ start_time }} seconds</p> -->
             
             <p style="margin-bottom:1px; text-align: center;">Play back the slice</p>
             <audio id="recPlayer" controls class="rec-player">
@@ -47,31 +80,25 @@
         document.addEventListener("DOMContentLoaded", function() {
             const recPlayer = document.getElementById("recPlayer");
             const recSource = document.getElementById("recSource");
-            // Add #t=3,4.5
-            console.log("Audio URL:'{{ audio_url }}'"); // Debugging line to check the audio URL
-            // recSource.src = "data:audio/wav;base64,{{ audio_url }}"; // Set the audio source
-            recSource.src = "{{ audio_url }}#t={{ slice_start }},{{ slice_end }}"; // Set the audio source
+            
+            console.log("Audio URL:'{{ audio_url }}'");
+            recSource.src = "{{ audio_url }}#t={{ slice_start }},{{ slice_end }}";
             recPlayer.load();
-            recPlayer.style.display = "inline-block"; // Show the audio player
+            recPlayer.style.display = "inline-block";
 
-            // Load id emolabel
+            // Load emotion label
             const emoLabel = document.getElementById("emoLabel");
             let sliceLabel = "{{ slice_label }}";
-            emoLabel.textContent = sliceLabel.charAt(0).toUpperCase() + sliceLabel.slice(1); // Capitalize the first letter
-
+            emoLabel.textContent = sliceLabel.charAt(0).toUpperCase() + sliceLabel.slice(1);
 
             let sliceEmoProbabilities = "{{ emotion_probabilities }}";
             // Transform this string of a dict back to a dict
-            // Replace HTML entities first
-            sliceEmoProbabilities = sliceEmoProbabilities.replace(/&#39;/g, "'"); // Replace &#39; with '
-            sliceEmoProbabilities = sliceEmoProbabilities.replace(/&quot;/g, '"'); // Replace &quot; with "
-            sliceEmoProbabilities = sliceEmoProbabilities.replace(/&amp;/g, '&'); // Replace &amp; with &
-
-            // Convert Python dict format to JSON format
-            // Replace single quotes around keys and string values with double quotes
+            sliceEmoProbabilities = sliceEmoProbabilities.replace(/&#39;/g, "'");
+            sliceEmoProbabilities = sliceEmoProbabilities.replace(/&quot;/g, '"');
+            sliceEmoProbabilities = sliceEmoProbabilities.replace(/&amp;/g, '&');
             sliceEmoProbabilities = sliceEmoProbabilities.replace(/'/g, '"');
 
-            console.log("Slice Emotion Probabilities:", sliceEmoProbabilities); // Debugging line to check the emotion probabilities
+            console.log("Slice Emotion Probabilities:", sliceEmoProbabilities);
 
             const overallEmotionProbs = [
                 document.getElementById('prob_emo0'),
@@ -82,9 +109,8 @@
             
             let emotionProbabilities = {};
             try {
-                // Parse the string to a JSON object
                 emotionProbabilities = JSON.parse(sliceEmoProbabilities);
-                console.log("Parsed Emotion Probabilities:", emotionProbabilities); // Debugging line to check the parsed emotion probabilities
+                console.log("Parsed Emotion Probabilities:", emotionProbabilities);
             } catch (error) {
                 console.error("Error parsing JSON:", error);
                 console.log("String that failed to parse:", sliceEmoProbabilities);
@@ -92,26 +118,34 @@
 
             // Iterate over the emotion probabilities and display them
             let counter = 0;
-            for (const [emotion, prob] of Object.entries(emotionProbabilities || {}))
-            {
-                console.log(`Emotion: ${emotion}, Probability: ${prob}`); // Debugging line to check each emotion and probability
+            for (const [emotion, prob] of Object.entries(emotionProbabilities || {})) {
+                console.log(`Emotion: ${emotion}, Probability: ${prob}`);
+                
                 // First letter of emotion capitalized
                 let emotionPrint = emotion.charAt(0).toUpperCase() + emotion.slice(1);
                 let probString = `${emotionPrint}: ${(prob * 100).toFixed(2)}%`;
-                overallEmotionProbs[counter].textContent = `${probString || 'N/A'}`;
+                if (overallEmotionProbs[counter]) {
+                    overallEmotionProbs[counter].textContent = probString;
+                }
+                
+                // Update bar chart
+                const barLabel = document.getElementById(`bar_label_${counter}`);
+                const barFill = document.getElementById(`bar_fill_${counter}`);
+                const barPercentage = document.getElementById(`bar_percentage_${counter}`);
+                
+                if (barLabel && barFill && barPercentage) {
+                    barLabel.textContent = emotionPrint;
+                    
+                    // Animate the bar fill after a short delay
+                    setTimeout(() => {
+                        barFill.style.width = `${(prob * 100).toFixed(1)}%`;
+                    }, 100 + (counter * 100)); // Stagger the animations
+                    
+                    barPercentage.textContent = `${(prob * 100).toFixed(1)}%`;
+                }
+                
                 counter++;
             }
-
-            // counter = 0;
-            // for (const [emotion, prob] of Object.entries(sliceEmoProbabilities || {})) {
-            //     // First letter of emotion capitalized
-            //     emotionPrint = emotion.charAt(0).toUpperCase() + emotion.slice(1);
-            //     console.log(`Emotion: ${emotionPrint}, Probability: ${prob}`); // Debugging line to check each emotion and probability
-            //     let probString = `${emotionPrint}: ${(prob * 100).toFixed(2)}%`;
-            //     overallEmotionProbs[counter].textContent = `${probString || 'N/A'}`;
-            //     counter++;    
-            // }
-            
         });
     </script>
 </body>

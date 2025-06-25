@@ -10,14 +10,12 @@
     <div class="container", style="text-align: center;">
         <h1>Explainable Music Emotion Recognition</h1>
         
+        <p id="initialInfobox" {% if show_waveform %}style="display: none;"{% endif %}>Record or load an audio file to analyze its emotional content.</p>
         <div class="controls">
             <button id="recordBtn" class="record-btn" {% if show_waveform %}style="display: none;"{% endif %}>Record</button>
+            <button id="loadBtn" class="load-btn"     {% if show_waveform %}style="display: none;"{% endif %}>Load Audio</button>
             <button id="stopBtn" class="record-btn" style="background-color: #666; display: none;">Stop</button>
-            {% if show_waveform %}
-            <button id="newRecordingBtn" class="new-recording-btn">New Recording</button>
-            <button id="clearBtn" class="clear-btn">Clear</button>
-            {% else %}
-            {% endif %}
+            
         </div>
         
         <div id="timer" style="font-size: 24px; font-weight: bold; margin: 10px 0; display: none;">
@@ -30,11 +28,15 @@
         <div id="waveformContainer" class="waveform-container">
             <!-- <h2>Recorded Waveform - Duration: <span id="waveformDuration"></span>s (Click on a section to zoom in)</h2> -->
             <!-- <div style="width:100%; overflow: scroll;"> -->
-                <a id="recFilename" class="rec-filename-display"></a>
+                <div class="rec-filename-display-box">
+                    <a id="recFilename" class="rec-filename-display"></a>
+                    {% if show_waveform %}
+                    <!-- <button id="newRecordingBtn" class="new-recording-btn">New Recording</button> -->
+                    <button id="clearBtn" class="clear-btn">Clear</button>
+                    {% else %}
+                    {% endif %}
+                </div>
             <!-- </div> -->
-            <div id="sliceStatus" class="slice-status">
-                <span id="sliceStatusText">Preparing slice views...</span>
-            </div>
             <audio id="recPlayer" controls class="rec-player">
                 <source id="recSource" src="" type="audio/wav">
                 Your browser does not support the audio element.
@@ -43,31 +45,75 @@
 
             <div id="overallEmotion" class="overall-emotion">
                 <div>Overall Emotion: <span id="overallEmotionText"></span></div>
-                <div class="box-vert-flex">
+                <!-- <div class="box-vert-flex">
                     <span id="prob_emo0"></span>
                     <span id="prob_emo1"></span>
                     <span id="prob_emo2"></span>
                     <span id="prob_emo3"></span>
-                </div>
+                </div> -->
+
+                
+                    <div class="bar-chart-container">
+                        <div class="bar-chart">
+                            <div class="bar-item">
+                                <div class="bar-label" id="bar_label_0">Emotion 1</div>
+                                <div class="bar-background">
+                                    <div class="bar-fill emotion-0" id="bar_fill_0" style="width: 0%"></div>
+                                    <div class="bar-percentage" id="bar_percentage_0">0%</div>
+                                </div>
+                            </div>
+                            <div class="bar-item">
+                                <div class="bar-label" id="bar_label_1">Emotion 2</div>
+                                <div class="bar-background">
+                                    <div class="bar-fill emotion-1" id="bar_fill_1" style="width: 0%"></div>
+                                    <div class="bar-percentage" id="bar_percentage_1">0%</div>
+                                </div>
+                            </div>
+                            <div class="bar-item">
+                                <div class="bar-label" id="bar_label_2">Emotion 3</div>
+                                <div class="bar-background">
+                                    <div class="bar-fill emotion-2" id="bar_fill_2" style="width: 0%"></div>
+                                    <div class="bar-percentage" id="bar_percentage_2">0%</div>
+                                </div>
+                            </div>
+                            <div class="bar-item">
+                                <div class="bar-label" id="bar_label_3">Emotion 4</div>
+                                <div class="bar-background">
+                                    <div class="bar-fill emotion-3" id="bar_fill_3" style="width: 0%"></div>
+                                    <div class="bar-percentage" id="bar_percentage_3">0%</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
             </div>
 
-            <div class="slice-overlay">
-                <img id="waveformImg" class="waveform-img" alt="Waveform">
-                <!-- Slice buttons will be added dynamically -->
+            
+            <div id="sliceStatus" class="slice-status">
+                <span id="sliceStatusText">Preparing slice views...</span>
+            </div>
+            <div class="chart-container">
+                <div class="slice-overlay">
+                    <img id="waveformImg" class="waveform-img" alt="Waveform">
+                    <!-- Slice buttons will be added dynamically -->
+                </div>
+                <img id="emotionChartImg" class="waveform-img" alt="Emotion Chart">
             </div>
         </div>
     </div>
 
     <script>
+        const initialInfobox = document.getElementById('initialInfobox');
         const recordBtn = document.getElementById('recordBtn');
+        const loadBtn = document.getElementById('loadBtn');
         const stopBtn = document.getElementById('stopBtn');
-        const newRecordingBtn = document.getElementById('newRecordingBtn');
+        // const newRecordingBtn = document.getElementById('newRecordingBtn');
         const clearBtn = document.getElementById('clearBtn');
         const timer = document.getElementById('timer');
         const timerDisplay = document.getElementById('timerDisplay');
         const status = document.getElementById('status');
         const waveformContainer = document.getElementById('waveformContainer');
         const waveformImg = document.getElementById('waveformImg');
+        const emotionChartImg = document.getElementById('emotionChartImg');
         const waveformDuration = document.getElementById('waveformDuration');
         const recFilename = document.getElementById('recFilename');
         const sliceStatus = document.getElementById('sliceStatus');
@@ -86,18 +132,23 @@
         let timerInterval;
         let sliceStatusInterval;
 
+        loadBtn.addEventListener('click', loadAudio);
         recordBtn.addEventListener('click', startRecording);
         stopBtn.addEventListener('click', stopRecording);
-        if (newRecordingBtn) {
-            newRecordingBtn.addEventListener('click', startNewRecording);
-        }
+        // if (newRecordingBtn) {
+        //     newRecordingBtn.addEventListener('click', startNewRecording);
+        // }
         if (clearBtn) {
             clearBtn.addEventListener('click', clearRec);
         }
 
         function clearRec() {
-            if (newRecordingBtn) newRecordingBtn.style.display = 'block';
+            // if (newRecordingBtn) newRecordingBtn.style.display = 'block';
+            recordBtn.style.display = 'inline-block';
+            loadBtn.style.display = 'inline-block';
+            initialInfobox.style.display = 'block';
             if (clearBtn) clearBtn.style.display = 'none';
+
             waveformContainer.style.display = 'none';
             status.style.display = 'none';
             sliceStatus.style.display = 'none';
@@ -125,7 +176,10 @@
         function startNewRecording() {
             // Reset the interface for new recording
             recordBtn.style.display = 'inline-block';
-            if (newRecordingBtn) newRecordingBtn.style.display = 'inline-block';
+            loadBtn.style.display = 'inline-block';
+            initialInfobox.style.display = 'block';
+
+            // if (newRecordingBtn) newRecordingBtn.style.display = 'inline-block';
             if (clearBtn) clearBtn.style.display = 'none';
             waveformContainer.style.display = 'none';
             status.style.display = 'none';
@@ -154,15 +208,58 @@
                 });
         }
 
+        function loadAudio() {
+            console.log('Loading audio file...');
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'audio/wav';
+            input.onchange = function(event) {
+                const file = event.target.files[0];
+
+                if (file) {
+                    showStatus('Uploading audio file...', 'loading');
+                    
+                    const formData = new FormData();
+                    formData.append('audio_file', file);  // Send the actual file, not just the name
+                    
+                    fetch('/upload_audio', {  // Changed endpoint name for clarity
+                        method: 'POST',
+                        body: formData  // Don't set Content-Type header - let browser set it with boundary
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        console.log('Audio file uploaded:', data);
+                        if (data.status === 'success') {
+                            showStatus(`Loaded audio file: ${file.name}`, 'ready');
+                            loadBtn.style.display = 'none';
+                            recordBtn.style.display = 'none';
+                            initialInfobox.style.display = 'none';
+                            if (clearBtn)
+                                clearBtn.style.display = 'inline-block';
+                            finishRecording();
+                        } else {
+                            showStatus(`Error: ${data.message}`, 'error');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error uploading audio file:', error);
+                        showStatus('Error loading audio file.', 'error');
+                    });
+                }
+            };
+            input.click();
+        }
+
         function startRecording() {
             if (isRecording) return;
 
             isRecording = true;
             recordBtn.style.display = 'none';
+            loadBtn.style.display = 'none';
             stopBtn.style.display = 'inline-block';
             timer.style.display = 'block';
             waveformContainer.style.display = 'none';
-            if (newRecordingBtn) newRecordingBtn.style.display = 'none';
+            // if (newRecordingBtn) newRecordingBtn.style.display = 'none';
             
             showStatus('Recording in progress... Click Stop when finished.', 'recording');
 
@@ -235,13 +332,17 @@
         }
 
         function finishRecording() {
+
             clearInterval(timerInterval);
             isRecording = false;
             recordBtn.style.display = 'none';
             stopBtn.style.display = 'none';
             timer.style.display = 'none';
             
-            showStatus('Processing waveform...', 'recording');
+            // Make it so the status cycles between funny messages describing a process going on
+            // Example: planting audio samples, watching the soundscape, trimming the waveform leaves, etc.
+            showStatus('', 'processing');
+
             
             fetch('/compute_waveform')
                 .then(response => response.json())
@@ -256,18 +357,22 @@
 
                         
                         // Show "New Recording" button
-                        if (!newRecordingBtn) {
-                            const newBtn = document.createElement('button');
-                            newBtn.id = 'newRecordingBtn';
-                            newBtn.className = 'new-recording-btn';
-                            newBtn.textContent = 'New Recording';
-                            newBtn.addEventListener('click', startNewRecording);
-                            document.querySelector('.controls').appendChild(newBtn);
-                        } else {
-                            newRecordingBtn.style.display = 'inline-block';
-                        }
+                        // if (!newRecordingBtn) {
+                        //     const newBtn = document.createElement('button');
+                        //     newBtn.id = 'newRecordingBtn';
+                        //     newBtn.className = 'new-recording-btn';
+                        //     newBtn.textContent = 'New Recording';
+                        //     newBtn.addEventListener('click', startNewRecording);
+                        //     document.querySelector('.controls').appendChild(newBtn);
+                        // } else {
+                        //     newRecordingBtn.style.display = 'inline-block';
+                        // }
+                        clearBtn.style.display = 'inline-block';
 
                         showStatus(`Recording complete!`, 'ready');
+                    }
+                    else {
+                        showStatus(`Error: ${data.message}`, 'error');
                     }
                 });
         }
@@ -281,6 +386,7 @@
         function displayWaveform(data) {
             console.log('Displaying waveform data:', data);
             waveformImg.src = 'data:image/png;base64,' + data.plot;
+            emotionChartImg.src = 'data:image/png;base64,' + data.emotion_chart;
             if (waveformDuration)
                 waveformDuration.textContent = data.duration.toFixed(1);
             recFilename.textContent = data.filename || 'No filename available';
@@ -293,15 +399,40 @@
 
             status.style.display = 'none';
 
-            emotionPrint = data.overall_emotion.charAt(0).toUpperCase() + data.overall_emotion.slice(1);
-            overallEmotionText.textContent = `${emotionPrint || 'Unknown'}`;
+            overallEmotionPrint = data.overall_emotion.charAt(0).toUpperCase() + data.overall_emotion.slice(1);
+            overallEmotionText.textContent = `${overallEmotionPrint || 'Unknown'}`;
             console.log('Overall Emotion Text set to :', overallEmotionText.textContent);
             counter = 0;
             for (const [emotion, prob] of Object.entries(data.overall_probabilities || {})) {
                 // First letter of emotion capitalized
                 emotionPrint = emotion.charAt(0).toUpperCase() + emotion.slice(1);
                 let probString = `${emotionPrint}: ${(prob * 100).toFixed(2)}%`;
-                overallEmotionProbs[counter].textContent = `${probString || 'N/A'}`;
+                if (overallEmotionProbs[counter]) {
+                    overallEmotionProbs[counter].textContent = probString;
+                }
+
+                // Update bar chart
+                const barLabel = document.getElementById(`bar_label_${counter}`);
+                const barFill = document.getElementById(`bar_fill_${counter}`);
+                const barPercentage = document.getElementById(`bar_percentage_${counter}`);
+                
+                if (barLabel && barFill && barPercentage) {
+                    barLabel.textContent = emotionPrint;
+
+                    if (overallEmotionPrint.toLowerCase() === emotionPrint.toLowerCase()) {
+                        barLabel.style.fontWeight = 'bold';
+                    } else {
+                        barLabel.style.fontWeight = 'normal';
+                    }
+                    
+                    // Animate the bar fill after a short delay
+                    setTimeout(() => {
+                        barFill.style.width = `${(prob * 100).toFixed(1)}%`;
+                    }, 100 + (counter * 100)); // Stagger the animations
+                    
+                    barPercentage.textContent = `${(prob * 100).toFixed(1)}%`;
+                }
+
                 counter++;    
             }
             
@@ -344,6 +475,55 @@
         }
 
         function showStatus(message, type) {
+
+            if (type === 'processing') {
+                // Make it so the status cycles between funny messages describing a process going on
+                // Example: planting audio samples, watching the soundscape, trimming the waveform leaves, etc.
+                let statusMessages = [
+                    'Planting audio samples...',
+                    'Watching the soundscape grow...',
+                    'Trimming the waveform leaves...',
+                    'Harvesting the audio crops...',
+                    'Preparing the waveform for the town festival...',
+                    'Gathering the sound waves...',
+                    'Teaching frequencies to behave...',
+                    'Herding stray decibels back into line...',
+                    'Polishing the audio crystals...',
+                    'Feeding the hungry algorithms...',
+                    'Untangling the audio spaghetti...',
+                    'Convincing the bits to cooperate...',
+                    'Massaging the data into submission...',
+                    'Whispering sweet nothings to the processor...',
+                    'Counting sheep... er, samples...',
+                    'Performing ancient audio rituals...',
+                    'Consulting the digital oracle...',
+                    'Negotiating with stubborn soundwaves...',
+                    'Brewing a fresh batch of frequencies...',
+                    'Tickling the microphone gently...',
+                    'Searching for the perfect sine wave...',
+                    'Calibrating the audio mood ring...',
+                    'Asking the sound elves for help...',
+                    'Reorganizing the frequency filing cabinet...',
+                    'Dusting off the vintage algorithms...',
+                    'Translating beeps into human...',
+                    'Convincing the audio to take a bath...',
+                    'Warming up the digital vocal cords...',
+                    'Ironing out the audio wrinkles...',
+                    'Giving the waveform a pep talk...',
+                ];
+                let statusIndex = 0;
+                const statusInterval = setInterval(() => {
+                    if (statusIndex < statusMessages.length) {
+                        showStatus(statusMessages[statusIndex], 'recording');
+                        statusIndex++;
+                    } else {
+                        clearInterval(statusInterval);
+                        statusIndex = 0;
+                    }
+                }, 4000);
+                return;
+            }
+
             status.textContent = message;
             status.className = `status ${type}`;
             status.style.display = 'block';

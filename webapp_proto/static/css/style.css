@@ -1,5 +1,43 @@
+
+@font-face {
+    font-family: 'youngserif';
+    src: url('youngserif-regular.eot');
+    src: url('youngserif-regular.eot?#iefix') format('embedded-opentype'),
+         url('youngserif-regular.svg#youngserifregular') format('svg'),
+         url('youngserif-regular.woff2') format('woff2'),
+         url('youngserif-regular.woff') format('woff');
+    font-weight: normal;
+    font-style: normal;
+
+}
+
+/* Monserrat bold and regular */
+@font-face {
+    font-family: 'Montserrat';
+    src: url('montserrat-regular.woff') format('woff'),
+         url('montserrat-regular.woff2') format('woff2');
+    font-weight: normal;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: 'Montserrat';
+    src: url('montserrat-bold.woff') format('woff'),
+         url('montserrat-bold.woff2') format('woff2');
+    font-weight: bold;
+    font-style: normal;
+}
+
+* {
+    /* font-family: Arial, sans-serif; */
+    font-family: 'Monserrat', sans-serif;
+    font-weight: normal;
+    font-style: normal;
+
+}
+
 body {
-    font-family: Arial, sans-serif;
+
     /* max-width: 1200px; */
     margin: 0 auto;
     padding: 20px;
@@ -10,6 +48,9 @@ body {
     padding: 30px;
     border-radius: 10px;
     box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+
+    max-width: 70rem;
+    margin: 0 auto;
 }
 .back-btn {
     background-color: #007bff;
@@ -52,20 +93,28 @@ body {
     margin-bottom: 1rem;
 }
 
-.record-btn {
-    background-color: #ff4444;
+button {
     color: white;
     border: none;
     padding: 15px 30px;
     font-size: 18px;
-    border-radius: 50px;
+    border-radius: 1rem;
     cursor: pointer;
-    margin-bottom: 20px;
     transition: background-color 0.3s;
 }
-.record-btn:hover {
-    background-color: #dd3333;
+button:hover {
+    filter: brightness(80%);
 }
+
+.record-btn {
+    background-color: #ff4444;
+}
+
+
+.load-btn {
+    background-color: rgb(51, 180, 39);
+}
+
 .record-btn:disabled {
     background-color: #cccccc;
     cursor: not-allowed;
@@ -186,18 +235,20 @@ body {
     margin-bottom: 20px;
     display: flex;
     justify-content: center;
+    gap: 2rem;
 }
 
 
 .slice-status {
-    margin-top: 10px;
-    padding: 8px;
-    border-radius: 5px;
+    margin: 10px auto;
+    padding:.5rem;
+    border-radius:.2rem;
     /* background-color: #e9ecef; */
     background-color: #fac585;
     text-align: center;
     font-size: 14px;
     display: none;
+    max-width: 30rem;
 }
 .slice-status.computing {
     /* background-color: #f5ab4b; */
@@ -210,10 +261,14 @@ body {
 
 .rec-filename-display {
     font-family: monospace;
+}
+.rec-filename-display-box {
     padding:.5rem;
     background-color: #dcdcdc;
+    border-radius:.2rem;
+    max-width: 30rem;
+    margin: 0 auto;
 }
-
 
 @media screen and (max-width: 768px) {
     .slice-container {
@@ -261,4 +316,97 @@ body {
     border-radius: .3rem;
     padding: .3rem;
     margin: .3rem;
+}
+
+.chart-container {
+    max-width: 70rem;
+    margin: 0 auto;
+}
+
+.slice-title {
+    display: flex; flex-direction: row; justify-content: center; align-items: baseline; gap:2rem
+}
+
+.slice-title h1 {
+    margin: 0;
+}
+
+
+
+.emotion-display {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+    margin-top: 10px;
+}
+
+/* .box-vert-flex {
+    flex: 1;
+} */
+
+.bar-chart-container {
+    flex: 1;
+    min-width: 300px;
+    margin: .5rem 0;
+}
+
+.bar-chart {
+    width: 100%;
+    max-width: 400px;
+}
+
+.bar-item {
+    display: flex;
+    align-items: center;
+    margin-bottom: 8px;
+    font-size: 14px;
+}
+
+.bar-label {
+    width: 80px;
+    text-align: right;
+    margin-right: 10px;
+    font-weight: 500;
+}
+
+.bar-background {
+    flex: 1;
+    height: 20px;
+    background-color: #e0e0e0;
+    border-radius: 10px;
+    position: relative;
+    overflow: hidden;
+}
+
+.bar-fill {
+    height: 100%;
+    border-radius: 10px;
+    transition: width 0.8s ease-in-out;
+    background: linear-gradient(90deg, #4CAF50, #81C784);
+}
+
+.bar-fill.emotion-0 {
+    background: linear-gradient(90deg, #FF6B6B, #FF8E8E);
+}
+
+.bar-fill.emotion-1 {
+    background: linear-gradient(90deg, #e8cf2e, #dbc536);
+}
+
+.bar-fill.emotion-2 {
+    background: linear-gradient(90deg, #96CEB4, #B8DCC6);
+}
+
+.bar-fill.emotion-3 {
+    background: linear-gradient(90deg, #45B7D1, #6BC5E0);
+}
+
+.bar-percentage {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #333;
+    font-size: 12px;
+    font-weight: bold;
 }

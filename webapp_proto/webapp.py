@@ -9,10 +9,18 @@ import time
 import threading
 from datetime import datetime
 import emotions, math, jack, soundfile as sf, librosa
+from scipy.interpolate import interp1d
+import sox
+
+def sox_length(path):
+    try:
+        length = sox.file_info.duration(path)
+        return length
+    except:
+        return None
 
 CLASSIFIER_SR = 22050  # Sample rate for classifier
 HIGHRES_SR = 48000  # Sample rate for high-resolution audio
-
 
 class MonoAudioRecorder:
     def __init__(self):
@@ -186,7 +194,99 @@ def read_wav_file(filename, sample_rate=None):
 
 #     return time_data, waveform_data
 
-def create_waveform_plot(time_data, waveform_data, emotionLabels=None, emotionProbabilities=None, title="Audio Waveform", highlight_slice=None,figure_size=(12, 6)):
+# def create_waveform_plot(time_data, waveform_data, emotionLabels=None, emotionProbabilities=None, title="Audio Waveform", highlight_slice=None,figure_size=(12, 6), display=True, sliceDuration=3, sliceStart=0.0):
+#     """Create a waveform plot and return as base64 encoded image"""
+#     fig, ax = plt.subplots(figsize=figure_size)
+#     ax.plot(time_data, waveform_data, 'b-', linewidth=0.5)
+#     ax.set_xlabel('Time (seconds)')
+#     if highlight_slice is not None:
+#         plt.ylabel('Amplitude')
+#     else:
+#         # Remove yticks
+#         ax.set_yticks([])  # Hide y-axis ticks
+#     ax.set_title(title)
+#     ax.grid(True, alpha=0.3)
+#     # maxw, minw = np.max(np.abs(waveform_data)), np.min(np.abs(waveform_data))
+#     # maxw = max(maxw, 1e-6)
+#     # minw = min(minw, -1e-6)
+#     # maxw = max(abs(maxw), abs(minw))
+#     # minw = -maxw
+#     minw, maxw = (-1.0, 1.0)  # Fixed range for better visualization
+
+#     # ax.set_ylim(-1.1, 1.1)
+#     ax.set_ylim(minw*1.1, maxw*1.1)
+
+#     x_min, x_max = ax.get_xlim()
+#     # print(f"x_min: {x_min}, x_max: {x_max}")
+#     trans = ax.transData.transform
+#     sliceBoundaries = []
+    
+#     if emotionLabels is not None:
+#         assert emotionProbabilities is not None, "Emotion probabilities must be provided if emotion labels are given"
+#         assert len(emotionLabels) == len(emotionProbabilities), "Emotion labels and probabilities must have the same length"
+#         # get pixel boundaries for each emotion label
+#         right_bound_pixel, _ = trans((x_max, 0))
+#         left_bound_pixel, _ = trans((x_min, 0))
+#         for i, (label, probabilities) in enumerate(zip(emotionLabels, emotionProbabilities)):
+#             assert len(probabilities) == len(emotions.EMOTIONS), "Probabilities must match the number of emotions"
+#             time_left = i * 3  # 3 seconds per slice
+#             time_right = (i + 1) * 3
+#             slice_left, _ = trans((time_left, 0))
+#             slice_right, _ = trans((time_right, 0))
+
+#             def floatMap (x, in_min, in_max, out_min, out_max):
+#                 """Map a float from one range to another"""
+#                 return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
+
+#             relative_left_px = floatMap(slice_left, left_bound_pixel, right_bound_pixel, 0, 1)
+#             relative_right_px = floatMap(slice_right, left_bound_pixel, right_bound_pixel, 0, 1)
+#             sliceBoundaries.append((relative_left_px, relative_right_px))
+
+#         # Add slice boundaries and labels for full waveform
+#         if highlight_slice is None and len(time_data) > 0:
+#             duration = time_data[-1]
+#             num_slices = len(emotionLabels)
+
+#             print(f"Duration: {duration}, Slice Duration: {sliceDuration}, Number of Slices: {num_slices}")
+            
+#             for i in range(0, num_slices+1):
+#                 slice_time = i * sliceDuration+sliceStart
+#                 if slice_time < duration:
+#                     ax.axvline(x=slice_time, color='r', linestyle='--', alpha=0.6)
+            
+#             # Add slice labels
+#             for i in range(num_slices):
+#                 slice_start = i * sliceDuration
+#                 slice_center = slice_start + sliceDuration / 2
+#                 if slice_center < duration:
+#                     label = emotionLabels[i] if i < len(emotionLabels) else "Unknown"
+#                     textlabel = emotionLabels[i]+" %.1f%%"%(emotionProbabilities[i][emotionLabels[i]]*100) if emotionLabels else ""
+#                     print('emotions.EMOTIONS_TO_COLOR',emotions.EMOTIONS_TO_COLOR)
+#                     print('label',label)
+#                     print('label in emotions.EMOTIONS_TO_COLOR.keys():', label in emotions.EMOTIONS_TO_COLOR.keys())
+#                     facecolor = emotions.EMOTIONS_TO_COLOR[label] if label in emotions.EMOTIONS_TO_COLOR.keys() else 'lightgrey'
+#                     plt.text(slice_center, 0.9, textlabel, ha='center', va='center', 
+#                             bbox=dict(boxstyle="round,pad=0.3", facecolor=facecolor, alpha=0.7),
+#                             fontsize=14, fontweight='bold')
+                
+#     # // xticks every sliceDuration/2, starting from sliceStart
+#     x_ticks = np.arange(sliceStart, time_data[-1], sliceDuration/2.0)
+#     ax.set_xticks(x_ticks)
+    
+#     plt.tight_layout()
+    
+#     if display:
+#         plt.show()
+#     # Convert plot to base64 string
+#     img = io.BytesIO()
+#     plt.savefig(img, format='png', dpi=100, bbox_inches='tight')
+#     img.seek(0)
+#     plot_url = base64.b64encode(img.getvalue()).decode()
+#     plt.close()
+    
+#     return plot_url, sliceBoundaries
+
+def create_waveform_plot(time_data, waveform_data, emotionLabels=None, emotionProbabilities=None, title=None, highlight_slice=None,figure_size=(12, 6), display=True, sliceDuration=3, sliceStart=0, simple=False):
     """Create a waveform plot and return as base64 encoded image"""
     fig, ax = plt.subplots(figsize=figure_size)
     ax.plot(time_data, waveform_data, 'b-', linewidth=0.5)
@@ -196,8 +296,13 @@ def create_waveform_plot(time_data, waveform_data, emotionLabels=None, emotionPr
     else:
         # Remove yticks
         ax.set_yticks([])  # Hide y-axis ticks
-    ax.set_title(title)
-    ax.grid(True, alpha=0.3)
+
+    printVerbose = lambda *args, **kwargs: None  # Placeholder for verbose output
+
+    if title:
+        ax.set_title(title)
+    if not simple:
+        ax.grid(True, alpha=0.3)
     # maxw, minw = np.max(np.abs(waveform_data)), np.min(np.abs(waveform_data))
     # maxw = max(maxw, 1e-6)
     # minw = min(minw, -1e-6)
@@ -206,12 +311,17 @@ def create_waveform_plot(time_data, waveform_data, emotionLabels=None, emotionPr
     minw, maxw = (-1.0, 1.0)  # Fixed range for better visualization
 
     # ax.set_ylim(-1.1, 1.1)
-    ax.set_ylim(minw*1.1, maxw*1.1)
+    if not simple:
+        ax.set_ylim(minw*1.1, maxw*1.1)
 
     x_min, x_max = ax.get_xlim()
     # print(f"x_min: {x_min}, x_max: {x_max}")
     trans = ax.transData.transform
     sliceBoundaries = []
+
+    # // xticks every sliceDuration/2, starting from sliceStart
+    x_ticks = np.arange(max(sliceStart, time_data[0]), time_data[-1]*1.1, sliceDuration/2.0)
+    ax.set_xticks(x_ticks)
     
     if emotionLabels is not None:
         assert emotionProbabilities is not None, "Emotion probabilities must be provided if emotion labels are given"
@@ -235,30 +345,39 @@ def create_waveform_plot(time_data, waveform_data, emotionLabels=None, emotionPr
             sliceBoundaries.append((relative_left_px, relative_right_px))
 
         # Add slice boundaries and labels for full waveform
-        if highlight_slice is None and len(time_data) > 0:
+        if highlight_slice is None and len(time_data) > 0 and not simple:
             duration = time_data[-1]
-            slice_duration = 3  # seconds
             num_slices = len(emotionLabels)
+
+            printVerbose(f"Duration: {duration}, Slice Duration: {sliceDuration}, Number of Slices: {num_slices}")
             
-            for i in range(1, num_slices):
-                slice_time = i * slice_duration
+            for i in range(0, num_slices+1):
+                slice_time = i * sliceDuration + sliceStart
                 if slice_time < duration:
-                    plt.axvline(x=slice_time, color='r', linestyle='--', alpha=0.6)
+                    ax.axvline(x=slice_time, color='r', linestyle='--', alpha=0.6)
             
             # Add slice labels
             for i in range(num_slices):
-                slice_start = i * slice_duration
-                slice_center = slice_start + slice_duration / 2
+                slice_start = i * sliceDuration
+                slice_center = slice_start + sliceDuration / 2
                 if slice_center < duration:
-                    label = emotionLabels[i]+" %.1f%%"%(emotionProbabilities[i][emotionLabels[i]]*100) if emotionLabels else ""
-                    facecolor = emotions.EMOTIONS_TO_COLOR[label] if label in emotions.EMOTIONS_TO_COLOR else 'lightgrey'
-                    plt.text(slice_center, 0.9, label, ha='center', va='center', 
+                    label = emotionLabels[i] if i < len(emotionLabels) else "Unknown"
+                    printVerbose('emotionProbabilities[i]', emotionProbabilities[i])
+                    textlabel = emotionLabels[i]+" %.1f%%"%(emotionProbabilities[i][emotionLabels[i]]*100) if emotionLabels else ""
+                    printVerbose('emotions.EMOTIONS_TO_COLOR',emotions.EMOTIONS_TO_COLOR)
+                    printVerbose('label',label)
+                    printVerbose('label in emotions.EMOTIONS_TO_COLOR.keys():', label in emotions.EMOTIONS_TO_COLOR.keys())
+                    facecolor = emotions.EMOTIONS_TO_COLOR[label] if label in emotions.EMOTIONS_TO_COLOR.keys() else 'lightgrey'
+                    plt.text(slice_center, 0.9, textlabel, ha='center', va='center', 
                             bbox=dict(boxstyle="round,pad=0.3", facecolor=facecolor, alpha=0.7),
                             fontsize=14, fontweight='bold')
                 
     
+    
     plt.tight_layout()
     
+    if display:
+        plt.show()
     # Convert plot to base64 string
     img = io.BytesIO()
     plt.savefig(img, format='png', dpi=100, bbox_inches='tight')
@@ -267,6 +386,127 @@ def create_waveform_plot(time_data, waveform_data, emotionLabels=None, emotionPr
     plt.close()
     
     return plot_url, sliceBoundaries
+
+def plot_emotion_graph(emotionProbabilities, startstop, audioduration, figure_size=(12, 6), display=False, smooth=True):
+    sample2Seconds = lambda x: x / CLASSIFIER_SR
+    startstop_s = [(sample2Seconds(start), sample2Seconds(stop)) for start, stop in startstop]
+
+    fig, ax = plt.subplots(figsize=figure_size)
+
+    # points should be a dict with a key per each emotion, and the value is a list of tuples (time, probability)
+    points = {}
+    for d, (start, stop) in zip(emotionProbabilities, startstop_s):
+        for emotion, prob in d.items():
+            if emotion not in points:
+                points[emotion] = []
+            # Calculate the time for this segment (center of segment)
+            segment_time = (start + stop) / 2
+            points[emotion].append((segment_time, prob))
+
+    # Get the overall time range
+    if startstop_s:
+        overall_start = min(start for start, _ in startstop_s)
+        overall_end = max(stop for _, stop in startstop_s)
+    else:
+        overall_start, overall_end = 0, 1
+
+    # Create lines for each emotion (smooth or simple)
+    for emotion, pts in points.items():
+        if len(pts) == 0:
+            continue
+            
+        # Sort points by time
+        pts = sorted(pts, key=lambda x: x[0])
+        point_times, point_probs = zip(*pts)
+        
+        emotion_capitalized = emotion.capitalize()
+        color = emotions.EMOTIONS_TO_COLOR.get(emotion, 'lightgrey')
+        
+        if smooth and len(pts) >= 2:
+            # Smooth interpolated lines
+            # Extend the line to cover the full time range
+            # Add points at the beginning and end with the same probability as the first/last points
+            extended_times = [overall_start] + list(point_times) + [overall_end]
+            extended_probs = [point_probs[0]] + list(point_probs) + [point_probs[-1]]
+            
+            # Create interpolation function
+            # Use 'cubic' for smooth curves, 'linear' for straight lines between points
+            try:
+                interp_func = interp1d(extended_times, extended_probs, kind='cubic', 
+                                     bounds_error=False, fill_value='extrapolate')
+            except:
+                # Fall back to linear interpolation if cubic fails
+                interp_func = interp1d(extended_times, extended_probs, kind='linear', 
+                                     bounds_error=False, fill_value='extrapolate')
+            
+            # Generate smooth time series for plotting
+            smooth_times = np.linspace(overall_start, overall_end, 200)
+            smooth_probs = interp_func(smooth_times)
+            
+            # Clip probabilities to [0, 1] range
+            smooth_probs = np.clip(smooth_probs, 0, 1)
+            
+            # Plot the smooth line
+            ax.plot(smooth_times, smooth_probs, 
+                   label=emotion_capitalized, 
+                   color=color, 
+                   linewidth=2, alpha=0.8)
+            
+            # Plot the original data points
+            ax.scatter(point_times, point_probs, 
+                      alpha=0.7, 
+                      color=color,
+                      s=30, zorder=5)
+        else:
+            # Simple lines connecting points directly
+            # Add start and end points to extend the line
+            start_time, start_prob = pts[0]
+            end_time, end_prob = pts[-1]
+            extended_times = [overall_start] + list(point_times) + [overall_end]
+            extended_probs = [start_prob] + list(point_probs) + [end_prob]
+            
+            # Plot simple line
+            ax.plot(extended_times, extended_probs, 
+                   linestyle='--', 
+                   label=emotion_capitalized, 
+                   color=color, 
+                   linewidth=1, alpha=0.8)
+            
+            # Plot the original data points
+            ax.scatter(point_times, point_probs, 
+                      alpha=0.5, 
+                      color=color)
+
+    # Set x-axis ticks
+    overall_end = max(overall_end, audioduration)  # Ensure end covers audio duration
+    ax.set_xlim(overall_start, overall_end)
+
+    xticks = np.arange(overall_start, overall_end + 1, 3)
+    ax.set_xticks(xticks, [f"{t:.0f}" for t in xticks], rotation=0)
+
+    # Add vertical dashed lines for each segment
+    for start, end in startstop_s:
+        ax.axvline(x=start, color='gray', linestyle='--', alpha=0.3, linewidth=0.8)
+        ax.axvline(x=end, color='gray', linestyle='--', alpha=0.3, linewidth=0.8)
+
+    ax.set_xlabel('Time (seconds)')
+    ax.set_ylabel('Emotion Probability')
+    # ax.set_ylim(0, 1)  # Ensure y-axis covers full probability range
+    ax.grid(True, alpha=0.3)
+    ax.legend()
+    plt.tight_layout()
+
+    if display:
+        plt.show()
+    
+    # Convert plot to base64 string
+    img = io.BytesIO()
+    plt.savefig(img, format='png', dpi=100, bbox_inches='tight')
+    img.seek(0)
+    plot_url = base64.b64encode(img.getvalue()).decode()
+    plt.close()
+
+    return plot_url
 
 def create_spectrogram_plot(time_data, waveform_data, sample_rate, title="Spectrogram", figure_size=(12, 6)):
     """Create a Spectrogram plot and return as base64 encoded image"""
@@ -523,15 +763,81 @@ def serve_audio(filename):
     
     return send_file(audio_path, mimetype='audio/wav')
 
+
+
+
+
+from werkzeug.utils import secure_filename
+
+# Configure upload settings
+UPLOAD_FOLDER = 'recordings'  # Create this directory
+ALLOWED_EXTENSIONS = {'wav', 'mp3', 'flac'}
+
+# Make sure upload directory exists
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+
+
+
+@app.route('/upload_audio', methods=['POST'])
+def upload_audio():
+    """Upload and save audio file"""
+    global recFilename, recording_status
+    
+    print(f"Received upload request")
+    
+    # Check if file was uploaded
+    if 'audio_file' not in request.files:
+        return jsonify({"status": "error", "message": "No file uploaded"}), 400
+    
+    file = request.files['audio_file']
+    
+    # Check if file was actually selected
+    if file.filename == '':
+        return jsonify({"status": "error", "message": "No file selected"}), 400
+    
+    if file and allowed_file(file.filename):
+        # Secure the filename and save
+        filename = secure_filename(file.filename)
+        
+        # Add timestamp to avoid conflicts
+        name, ext = os.path.splitext(filename)
+        timestamp = int(time.time())
+        unique_filename = f"{name}_{timestamp}{ext}"
+        
+        filepath = os.path.join(UPLOAD_FOLDER, unique_filename)
+        file.save(filepath)
+        
+        # Store the full path for later use
+        recFilename = filepath
+        # recording_status["duration"] = 1  # You might want to get actual duration
+        recording_status["duration"] = sox_length(filepath)
+        
+        print(f"File saved as: {filepath}")
+        
+        return jsonify({
+            "status": "success", 
+            "filename": unique_filename,
+            "original_name": file.filename,
+            "path": filepath
+        })
+    else:
+        return jsonify({"status": "error", "message": "Invalid file type"}), 400
+
 # Modify the compute_waveform function
 @app.route('/compute_waveform')
 def compute_waveform():
     """Generate and return the waveform data"""
     global current_waveform, waveform_json, recFilename, recording_status
 
-    print("Computing waveform...")
-    
-    if not recording_status["is_recording"] and recording_status["duration"] > 0:
+    print("\n\nComputing waveform...")
+
+    if not recording_status["is_recording"] and recording_status["duration"] >= 3:
+        print("Recording has stopped, processing waveform...")
         # Generate the sinusoid for the recorded duration
         # duration = recording_status["duration"]
         # _, waveform_data = generate_sinusoid(duration)
@@ -559,7 +865,7 @@ def compute_waveform():
         assert lores_waveform_data is not None, "Low-resolution waveform data must not be None"
         assert len(lores_waveform_data) > 0, "Low-resolution waveform data must not be empty"
 
-        mel_segments, audio_segments, _ = emotions.split_song(lores_waveform_data,
+        mel_segments, audio_segments, segment_startstop_smp = emotions.split_song(lores_waveform_data,
                                                               sampling_rate=CLASSIFIER_SR,
                                                               segment_duration_s=3,
                                                               overlap=0)
@@ -586,6 +892,8 @@ def compute_waveform():
         # print(f"Emotion probabilities: {emotionProbabilities}")
 
         plot_url, sliceBoundaries = create_waveform_plot(time_data, waveform_data, emotionLabels, emotionProbabilities)
+
+        emotion_chart_url = plot_emotion_graph(emotionProbabilities,segment_startstop_smp, duration)
         
         colors = [emotions.EMOTIONS_TO_COLOR[label] for label in emotionLabels]
 
@@ -609,6 +917,7 @@ def compute_waveform():
             "status": "ready",
             "filename": os.path.basename(recFilename),
             "plot": plot_url,
+            "emotion_chart": emotion_chart_url,
             "duration": duration,
             "slices": slices,
             "audio_url": audio_url,
@@ -633,8 +942,12 @@ def compute_waveform():
         print("Started background slice precomputation")
 
         return waveform_json
-
+    elif not recording_status["is_recording"] and recording_status["duration"] < 3:
+        print("Recording too short, must be at least 3 seconds")
+        return jsonify({"status": "not_ready", "message": "Recording too short, must be at least 3 seconds, found: %.2f seconds instead" % recording_status["duration"]})
     else:
+        print("Waveform computation skipped, recording is still in progress or no recording data available")
+        print(f"recording_status[is_recording']: {recording_status['is_recording']}")
         return jsonify({"status": "not_ready"})
 
 # Add new route to check slice computation status
