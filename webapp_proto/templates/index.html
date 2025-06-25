@@ -10,9 +10,19 @@
     <div class="container", style="text-align: center;">
         <h1>Explainable Music Emotion Recognition</h1>
         
-        <p id="initialInfobox" {% if show_waveform %}style="display: none;"{% endif %}>Record or load an audio file to analyze its emotional content.</p>
+        <p id="initialInfobox" {% if show_waveform %}style="display: none;"{% endif %}>
+            {% if recording_supported %}
+                Record or load
+            {% else %}
+                Load
+            {% endif %}
+            an audio file to analyze its emotional content.</p>
         <div class="controls">
-            <button id="recordBtn" class="record-btn" {% if show_waveform %}style="display: none;"{% endif %}>Record</button>
+            {% if recording_supported %}
+                    <!-- <button id="newRecordingBtn" class="new-recording-btn">New Recording</button> -->
+                        <button id="recordBtn" class="record-btn" {% if show_waveform %}style="display: none;"{% endif %}>Record</button>
+            {% else %}
+            {% endif %}
             <button id="loadBtn" class="load-btn"     {% if show_waveform %}style="display: none;"{% endif %}>Load Audio</button>
             <button id="stopBtn" class="record-btn" style="background-color: #666; display: none;">Stop</button>
             
@@ -28,80 +38,254 @@
         <div id="waveformContainer" class="waveform-container">
             <!-- <h2>Recorded Waveform - Duration: <span id="waveformDuration"></span>s (Click on a section to zoom in)</h2> -->
             <!-- <div style="width:100%; overflow: scroll;"> -->
-                <div class="rec-filename-display-box">
-                    <a id="recFilename" class="rec-filename-display"></a>
-                    {% if show_waveform %}
-                    <!-- <button id="newRecordingBtn" class="new-recording-btn">New Recording</button> -->
-                    <button id="clearBtn" class="clear-btn">Clear</button>
-                    {% else %}
-                    {% endif %}
-                </div>
+            <div class="rec-filename-display-box">
+                <a id="recFilename" class="rec-filename-display"></a>
+                {% if show_waveform %}
+                <!-- <button id="newRecordingBtn" class="new-recording-btn">New Recording</button> -->
+                <button id="clearBtn" class="clear-btn">Clear</button>
+                {% else %}
+                {% endif %}
+            </div>
+
+            <div class="message-box">
+                <p id="message" style="margin: 0">Nice song!</p>
+                <p>We liked your song so much that we ran it through a <b>Neural Network</b> <a href="http://wikipedia.org/wiki/Neural_network" target="_blank">(what is that?)</a> that tries to understand its emotional content.</p>
+                <p>The Artificial model only understands <i>extremes</i>: <b class="emocolor-darker-aggressive">Aggressiveness</b>, <b class="emocolor-darker-happy">Happiness</b>, <b class="emocolor-darker-relaxed">Relaxedness</b>, and <b class="emocolor-darker-sad">Sadness</b>.</p>
+
+                <p>And the winner is...</p>
+            </div>
+
+            <div id="overallEmotion" class="overall-emotion">
+                <div>Overall Emotion: <span id="overallEmotionText"></span></div>
+            </div>
+
+            
+            <div class="message-box">
+                <p>You can listen to it again to see whether you agree or not:</p>
+            </div>
+                
             <!-- </div> -->
             <audio id="recPlayer" controls class="rec-player">
                 <source id="recSource" src="" type="audio/wav">
                 Your browser does not support the audio element.
             </audio>
 
+            <div class="message-box" id="dist-emo-infobox">
+                <p>Want to know more about how shure the model was? Click the <b>Show Distribution</b> button below.
+            </div>
 
-            <div id="overallEmotion" class="overall-emotion">
-                <div>Overall Emotion: <span id="overallEmotionText"></span></div>
-                <!-- <div class="box-vert-flex">
-                    <span id="prob_emo0"></span>
-                    <span id="prob_emo1"></span>
-                    <span id="prob_emo2"></span>
-                    <span id="prob_emo3"></span>
-                </div> -->
+            <button class="show-distribution-btn" id="showDistributionBtn" onclick="showBarChart(this)">
+                <span>Show Distribution</span>
+            </button>
 
-                
-                    <div class="bar-chart-container">
-                        <div class="bar-chart">
-                            <div class="bar-item">
-                                <div class="bar-label" id="bar_label_0">Emotion 1</div>
-                                <div class="bar-background">
-                                    <div class="bar-fill emotion-0" id="bar_fill_0" style="width: 0%"></div>
-                                    <div class="bar-percentage" id="bar_percentage_0">0%</div>
-                                </div>
-                            </div>
-                            <div class="bar-item">
-                                <div class="bar-label" id="bar_label_1">Emotion 2</div>
-                                <div class="bar-background">
-                                    <div class="bar-fill emotion-1" id="bar_fill_1" style="width: 0%"></div>
-                                    <div class="bar-percentage" id="bar_percentage_1">0%</div>
-                                </div>
-                            </div>
-                            <div class="bar-item">
-                                <div class="bar-label" id="bar_label_2">Emotion 3</div>
-                                <div class="bar-background">
-                                    <div class="bar-fill emotion-2" id="bar_fill_2" style="width: 0%"></div>
-                                    <div class="bar-percentage" id="bar_percentage_2">0%</div>
-                                </div>
-                            </div>
-                            <div class="bar-item">
-                                <div class="bar-label" id="bar_label_3">Emotion 4</div>
-                                <div class="bar-background">
-                                    <div class="bar-fill emotion-3" id="bar_fill_3" style="width: 0%"></div>
-                                    <div class="bar-percentage" id="bar_percentage_3">0%</div>
-                                </div>
-                            </div>
+            <div class="bar-chart-container">
+                <p><b>Emotion Distribution</b></p>
+                <div class="bar-chart">
+                    <div class="bar-item">
+                        <div class="bar-label" id="bar_label_0">Emotion 1</div>
+                        <div class="bar-background">
+                            <div class="bar-fill emotion-0" id="bar_fill_0" style="width: 0%"></div>
+                            <div class="bar-percentage" id="bar_percentage_0">0%</div>
                         </div>
                     </div>
+                    <div class="bar-item">
+                        <div class="bar-label" id="bar_label_1">Emotion 2</div>
+                        <div class="bar-background">
+                            <div class="bar-fill emotion-1" id="bar_fill_1" style="width: 0%"></div>
+                            <div class="bar-percentage" id="bar_percentage_1">0%</div>
+                        </div>
+                    </div>
+                    <div class="bar-item">
+                        <div class="bar-label" id="bar_label_2">Emotion 3</div>
+                        <div class="bar-background">
+                            <div class="bar-fill emotion-2" id="bar_fill_2" style="width: 0%"></div>
+                            <div class="bar-percentage" id="bar_percentage_2">0%</div>
+                        </div>
+                    </div>
+                    <div class="bar-item">
+                        <div class="bar-label" id="bar_label_3">Emotion 4</div>
+                        <div class="bar-background">
+                            <div class="bar-fill emotion-3" id="bar_fill_3" style="width: 0%"></div>
+                            <div class="bar-percentage" id="bar_percentage_3">0%</div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             
-            <div id="sliceStatus" class="slice-status">
+            <div class="message-box below-bar-chart">
+                <p>But we can tell you more. This AI model (the neural network) looks at pieces of 3 seconds of audio at a time, so we can show you what the model
+                thought about each piece of the song.</p>
+            </div>
+
+            <button class="show-waveform-btn below-bar-chart" id="showWaveformBtn" onclick="showWaveform(this)">
+                <span>Show Waveform</span>
+            </button>
+
+            
+            <div id="sliceStatus" class="slice-status below-bar-chart below-waveform">
                 <span id="sliceStatusText">Preparing slice views...</span>
             </div>
-            <div class="chart-container">
+            <div class="chart-container below-bar-chart below-waveform">
                 <div class="slice-overlay">
                     <img id="waveformImg" class="waveform-img" alt="Waveform">
                     <!-- Slice buttons will be added dynamically -->
                 </div>
+            </div>
+                
+            <div class="chart-container below-bar-chart below-waveform" id="emotionChartImgBox">
+                <p>And since your song contains multiple slices, you can check out how the <b>model's confidence</b> changes <b>through time</b></p>
                 <img id="emotionChartImg" class="waveform-img" alt="Emotion Chart">
             </div>
+
+
+            
+            <button class="show-slices-btn below-bar-chart below-waveform" id="showSlicesBtn" onclick="showSlices(this)">
+                <span>I want to know more about the slices!</span>
+            </button>
         </div>
     </div>
 
     <script>
+
+        // if showSliceButtons is not a sessionStorage item, set it to false
+        if (!sessionStorage.getItem('showSliceButtons')) {
+            sessionStorage.setItem('showSliceButtons', 'false');
+        }
+
+        function showBarChart(elem) {
+            console.log('Show Distribution button clicked');
+            document.querySelector('.bar-chart-container').style.display = 'block';
+            elem.style.display = 'none';
+            document.getElementById('dist-emo-infobox').style.display = 'none';
+            sessionStorage.setItem('showDistribution', 'true');
+            document.querySelector('.bar-chart-container').scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+            // Show all below-bar-chart elements
+            const belowBarChartElements = document.querySelectorAll('.below-bar-chart');
+            belowBarChartElements.forEach(el => {
+
+                // show only if below-waveform is not part of the class
+                if (!el.classList.contains('below-waveform')) {
+                    el.style.display = 'block';
+                }
+            });
+            
+        }
+
+        function showWaveform(elem) {
+            console.log('Show Waveform button clicked');
+            document.querySelector('.slice-overlay').style.display = 'block';
+
+            elem.style.display = 'none';
+            sessionStorage.setItem('showWaveform', 'true');
+            sessionStorage.setItem('showSliceButtons', 'false');
+            document.querySelector('.slice-overlay').scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+            // Show all below-waveform elements
+            document.querySelectorAll('.below-waveform').forEach(el => {
+                el.style.display = 'block';
+            });
+
+            document.querySelectorAll('.slice-button').forEach(el => {
+                el.style.display = 'none';
+            });
+        }
+
+
+
+        if (sessionStorage.getItem('showDistribution') === 'true') {
+            document.querySelector('.bar-chart-container').style.display = 'block';
+            document.getElementById('showDistributionBtn').style.display = 'none';
+            document.getElementById('dist-emo-infobox').style.display = 'none';
+
+            // Show all elements with class "below-bar-chart"
+            const belowBarChartElements = document.querySelectorAll('.below-bar-chart');
+            belowBarChartElements.forEach(el => {
+                el.style.display = 'block';
+            });
+        } else {
+            document.querySelector('.bar-chart-container').style.display = 'none';
+
+            // hide all elements with class "below-bar-chart"
+            const belowBarChartElements = document.querySelectorAll('.below-bar-chart');
+            belowBarChartElements.forEach(el => {
+                el.style.display = 'none';
+            });
+        }
+        
+        if (sessionStorage.getItem('showWaveform') === 'true') {
+            document.querySelector('.slice-overlay').style.display = 'block';
+            document.getElementById('showWaveformBtn').style.display = 'none';
+
+            // Show all elements with class "below-waveform"
+            document.querySelectorAll('.below-waveform').forEach(el => {
+                el.style.display = 'block';
+            });
+
+            // Hide all elements with class "slice-button"
+            console.log('Hiding slice buttons');
+            document.querySelectorAll('.slice-button').forEach(el => {
+                el.style.display = 'none';
+            });
+        } else {
+            document.querySelector('.slice-overlay').style.display = 'none';
+            // hide all elements with class "below-waveform"
+            document.querySelectorAll('.below-waveform').forEach(el => {
+                el.style.display = 'none';
+            });
+        }
+
+        function showSlices(elem) {
+            console.log('Show Slices button clicked');
+            // Show all slice buttons
+            document.querySelectorAll('.slice-button').forEach(el => {
+                el.style.display = 'block';
+            });
+            // elem.style.display = 'none';
+            sessionStorage.setItem('showSliceButtons', 'true');
+            document.querySelector('.slice-overlay').scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+
+        const messages = [
+            "Nice song!",
+            "Great improvisation!",
+            "Wow!",
+            "Amazing performance!",
+            "Incredible talent!",
+            "That was beautiful!",
+            "Outstanding!",
+            "Brilliant work!",
+            "Absolutely stunning!",
+            "What a masterpiece!",
+            "Exceptional playing!",
+            "Mind-blowing!",
+            "Perfect execution!",
+            "Truly inspiring!",
+            "Absolutely magical!",
+            "Phenomenal!",
+            "That gave me chills!",
+            "Pure artistry!",
+            "Breathtaking!",
+            "Absolutely incredible!",
+            "That was flawless!",
+            "Such emotion!",
+            "Goosebumps!",
+            "Spectacular!",
+            "That touched my soul!",
+            "Mesmerizing!",
+            "Absolutely divine!",
+            "What a gift!",
+            "Legendary performance!",
+            "That was pure magic!"
+        ];
+
+        function showRandomMessage() {
+            const randomIndex = Math.floor(Math.random() * messages.length);
+            document.getElementById('message').textContent = messages[randomIndex];
+        }
+        showRandomMessage();
+
         const initialInfobox = document.getElementById('initialInfobox');
         const recordBtn = document.getElementById('recordBtn');
         const loadBtn = document.getElementById('loadBtn');
@@ -114,6 +298,7 @@
         const waveformContainer = document.getElementById('waveformContainer');
         const waveformImg = document.getElementById('waveformImg');
         const emotionChartImg = document.getElementById('emotionChartImg');
+        const emotionChartImgBox = document.getElementById('emotionChartImgBox');
         const waveformDuration = document.getElementById('waveformDuration');
         const recFilename = document.getElementById('recFilename');
         const sliceStatus = document.getElementById('sliceStatus');
@@ -133,7 +318,8 @@
         let sliceStatusInterval;
 
         loadBtn.addEventListener('click', loadAudio);
-        recordBtn.addEventListener('click', startRecording);
+        if (recordBtn)
+            recordBtn.addEventListener('click', startRecording);
         stopBtn.addEventListener('click', stopRecording);
         // if (newRecordingBtn) {
         //     newRecordingBtn.addEventListener('click', startNewRecording);
@@ -144,7 +330,8 @@
 
         function clearRec() {
             // if (newRecordingBtn) newRecordingBtn.style.display = 'block';
-            recordBtn.style.display = 'inline-block';
+            if (recordBtn)
+                recordBtn.style.display = 'inline-block';
             loadBtn.style.display = 'inline-block';
             initialInfobox.style.display = 'block';
             if (clearBtn) clearBtn.style.display = 'none';
@@ -164,6 +351,11 @@
                 .then(data => {
                     console.log('Recording cleared:', data);
                 });
+
+            // ALso, reset sessionStorage items that show/hide elements
+            sessionStorage.removeItem('showDistribution');
+            sessionStorage.removeItem('showWaveform');
+            sessionStorage.removeItem('showSliceButtons');
         }
 
         // Load existing waveform if available
@@ -175,7 +367,8 @@
 
         function startNewRecording() {
             // Reset the interface for new recording
-            recordBtn.style.display = 'inline-block';
+            if(recordBtn)
+                recordBtn.style.display = 'inline-block';
             loadBtn.style.display = 'inline-block';
             initialInfobox.style.display = 'block';
 
@@ -232,7 +425,8 @@
                         if (data.status === 'success') {
                             showStatus(`Loaded audio file: ${file.name}`, 'ready');
                             loadBtn.style.display = 'none';
-                            recordBtn.style.display = 'none';
+                            if (recordBtn)
+                                recordBtn.style.display = 'none';
                             initialInfobox.style.display = 'none';
                             if (clearBtn)
                                 clearBtn.style.display = 'inline-block';
@@ -254,7 +448,8 @@
             if (isRecording) return;
 
             isRecording = true;
-            recordBtn.style.display = 'none';
+            if (recordBtn)
+                recordBtn.style.display = 'none';
             loadBtn.style.display = 'none';
             stopBtn.style.display = 'inline-block';
             timer.style.display = 'block';
@@ -296,7 +491,7 @@
         }
 
         function startSliceStatusMonitoring() {
-            sliceStatus.style.display = 'block';
+            // sliceStatus.style.display = 'block'; //TODO: see whether to enable this again
             sliceStatusInterval = setInterval(() => {
                 fetch('/slice_status')
                     .then(response => response.json())
@@ -335,13 +530,14 @@
 
             clearInterval(timerInterval);
             isRecording = false;
-            recordBtn.style.display = 'none';
+            if (recordBtn)
+                recordBtn.style.display = 'none';
             stopBtn.style.display = 'none';
             timer.style.display = 'none';
             
             // Make it so the status cycles between funny messages describing a process going on
             // Example: planting audio samples, watching the soundscape, trimming the waveform leaves, etc.
-            showStatus('', 'processing');
+            // showStatus('', 'processing');
 
             
             fetch('/compute_waveform')
@@ -370,6 +566,7 @@
                         clearBtn.style.display = 'inline-block';
 
                         showStatus(`Recording complete!`, 'ready');
+                        location.reload();
                     }
                     else {
                         showStatus(`Error: ${data.message}`, 'error');
@@ -384,9 +581,19 @@
         }
 
         function displayWaveform(data) {
-            console.log('Displaying waveform data:', data);
+            // console.log('Displaying waveform data:', data);
             waveformImg.src = 'data:image/png;base64,' + data.plot;
-            emotionChartImg.src = 'data:image/png;base64,' + data.emotion_chart;
+            if (data.slices.length > 1){
+                emotionChartImg.src = 'data:image/png;base64,' + data.emotion_chart;
+                // emotionChartImgBox.style.display = 'block';
+                if (sessionStorage.getItem('showWaveform') === 'true') {
+                    emotionChartImgBox.style.display = 'block';
+                } else {
+                    emotionChartImgBox.style.display = 'none';
+                }
+            }else{
+                emotionChartImgBox.style.display = 'none';
+            }
             if (waveformDuration)
                 waveformDuration.textContent = data.duration.toFixed(1);
             recFilename.textContent = data.filename || 'No filename available';
@@ -401,7 +608,8 @@
 
             overallEmotionPrint = data.overall_emotion.charAt(0).toUpperCase() + data.overall_emotion.slice(1);
             overallEmotionText.textContent = `${overallEmotionPrint || 'Unknown'}`;
-            console.log('Overall Emotion Text set to :', overallEmotionText.textContent);
+            overallEmotionText.className = overallEmotionText.className + ` emocolor-darker-${data.overall_emotion.toLowerCase() || 'unknown'}`;
+            // console.log('Overall Emotion Text set to :', overallEmotionText.textContent);
             counter = 0;
             for (const [emotion, prob] of Object.entries(data.overall_probabilities || {})) {
                 // First letter of emotion capitalized
@@ -452,6 +660,12 @@
             for (let i = 0; i < numSlices; i++) {
                 const sliceBtn = document.createElement('div');
                 sliceBtn.className = 'slice-button';
+                if (sessionStorage.getItem('showSliceButtons' === false)) {
+                    sliceBtn.style.display = 'none';
+                } else {
+                    sliceBtn.style.display = 'block';
+                }
+                // sliceBtn.style.display = 'none';
                 sliceBtn.style.backgroundColor = addAlpha(data.slices[i].color, 0.2) || 'rgba(255, 255, 0, 0.3)';
                 sliceBtn.style.left = data.slices[i].left * 100 + '%';
                 sliceBtn.style.width = data.slices[i].width * 100 + '%';

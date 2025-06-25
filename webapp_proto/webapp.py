@@ -8,7 +8,10 @@ import base64
 import time
 import threading
 from datetime import datetime
-import emotions, math, jack, soundfile as sf, librosa
+import emotions
+import math
+import soundfile as sf
+import librosa
 from scipy.interpolate import interp1d
 import sox
 
@@ -22,117 +25,124 @@ def sox_length(path):
 CLASSIFIER_SR = 22050  # Sample rate for classifier
 HIGHRES_SR = 48000  # Sample rate for high-resolution audio
 
-class MonoAudioRecorder:
-    def __init__(self):
-        self.recording = False
-        self.start_time = None
-        self.duration = 0
-        self.buffer = []
+RECORD_AUDIO = False
 
-    def start(self):
-        self.recording = True
-        self.start_time = time.time()
-        self.duration = 0
+if RECORD_AUDIO:
+    import jack
 
-    def stop(self):
-        if self.recording:
-            self.duration = time.time() - self.start_time
+
+    class MonoAudioRecorder:
+        def __init__(self):
             self.recording = False
+            self.start_time = None
+            self.duration = 0
+            self.buffer = []
 
-    def process(self, buffer):
-        """Process audio frames"""
-        if self.recording:
-            self.buffer.extend(buffer)
+        def start(self):
+            self.recording = True
+            self.start_time = time.time()
+            self.duration = 0
 
-    def getBuffer(self):
-        """Get the recorded audio buffer"""
-        return np.array(self.buffer, dtype=np.float32)
-    
-    def saveToFile(self, filename):
-        """Save the recorded audio to a file"""
-        if self.buffer:
-            audio_data = np.array(self.buffer, dtype=np.float32)
-            
-            sf.write(filename, audio_data, HIGHRES_SR, subtype='PCM_16')
-            print(f"Audio saved to {filename}")
-        else:
-            print("No audio data to save.")
-    
-    def clearBuffer(self):
-        """Clear the recorded audio buffer"""
-        self.buffer = []
+        def stop(self):
+            if self.recording:
+                self.duration = time.time() - self.start_time
+                self.recording = False
 
-recorder = MonoAudioRecorder()
+        def process(self, buffer):
+            """Process audio frames"""
+            if self.recording:
+                self.buffer.extend(buffer)
+
+        def getBuffer(self):
+            """Get the recorded audio buffer"""
+            return np.array(self.buffer, dtype=np.float32)
+        
+        def saveToFile(self, filename):
+            """Save the recorded audio to a file"""
+            if self.buffer:
+                audio_data = np.array(self.buffer, dtype=np.float32)
+                
+                sf.write(filename, audio_data, HIGHRES_SR, subtype='PCM_16')
+                print(f"Audio saved to {filename}")
+            else:
+                print("No audio data to save.")
+        
+        def clearBuffer(self):
+            """Clear the recorded audio buffer"""
+            self.buffer = []
+
+    recorder = MonoAudioRecorder()
 recFilename = None # To be locked and written from different threads
 
 
 app = Flask(__name__)
 
-# Close all jack clients
-client = jack.Client('MusicEmotionXAI', session_id='MusicEmotionXAI')
+if RECORD_AUDIO:
+    # Close all jack clients
+    client = jack.Client('MusicEmotionXAI', session_id='MusicEmotionXAI')
 
-event = threading.Event()
+    event = threading.Event()
 
-time.sleep(2)  # 
-print('JACK server started!')
-# create two port pairs
-in1 = client.inports.register(f'input_{1}')
-out1 = client.outports.register(f'output_{1}')
+    time.sleep(2)  # 
+    print('JACK server started!')
+    # create two port pairs
+    in1 = client.inports.register(f'input_{1}')
+    out1 = client.outports.register(f'output_{1}')
 
-print('waiting for JACK server to start...')
+    print('waiting for JACK server to start...')
 
-@client.set_process_callback
-def process(frames):
-    assert len(client.inports) == len(client.outports)
-    assert frames == client.blocksize
+    @client.set_process_callback
+    def process(frames):
+        assert len(client.inports) == len(client.outports)
+        assert frames == client.blocksize
+            
+        # Double the volume of the input signal
+        inbuf = memoryview(in1.get_buffer()).cast('f')
+
+
+        inbufnp = np.frombuffer(inbuf, dtype=np.float32)
+
+        # inbufnp*= 6.0 # Amplify the input signal by 6x
+        recorder.process(inbufnp)  # Process the input buffer
+
+        outbuf = memoryview(out1.get_buffer()).cast('f')
+
         
-    # Double the volume of the input signal
-    inbuf = memoryview(in1.get_buffer()).cast('f')
-
-
-    inbufnp = np.frombuffer(inbuf, dtype=np.float32)
-
-    # inbufnp*= 6.0 # Amplify the input signal by 6x
-    recorder.process(inbufnp)  # Process the input buffer
-
-    outbuf = memoryview(out1.get_buffer()).cast('f')
-
-    
-    outbufnp = np.frombuffer(outbuf, dtype=np.float32)
-    if len(inbufnp) > 0:
-        if recorder.recording:
-            outbufnp[:] = inbufnp
-        else:
-            # If not recording, just pass the input to output
-            outbufnp[:] = [0.0] * len(inbufnp)  # Mute output if not recording
+        outbufnp = np.frombuffer(outbuf, dtype=np.float32)
+        if len(inbufnp) > 0:
+            if recorder.recording:
+                outbufnp[:] = inbufnp
+            else:
+                # If not recording, just pass the input to output
+                outbufnp[:] = [0.0] * len(inbufnp)  # Mute output if not recording
 
 
 
-@client.set_shutdown_callback
-def shutdown(status, reason):
-    print('JACK shutdown!')
-    print('status:', status)
-    print('reason:', reason)
-    event.set()
+    @client.set_shutdown_callback
+    def shutdown(status, reason):
+        print('JACK shutdown!')
+        print('status:', status)
+        print('reason:', reason)
+        event.set()
 
 
-client.activate()
+    client.activate()
 
 
-capture = client.get_ports(is_physical=True, is_output=True)
-if not capture:
-    raise RuntimeError('No physical capture ports')
+    capture = client.get_ports(is_physical=True, is_output=True)
+    if not capture:
+        raise RuntimeError('No physical capture ports')
 
-for jackAudioIn in capture:
-    client.connect(jackAudioIn, client.inports[0])
+    for jackAudioIn in capture:
+        client.connect(jackAudioIn, client.inports[0])
 
-playback = client.get_ports(is_physical=True, is_input=True)
-if not playback:
-    raise RuntimeError('No physical playback ports')
+    playback = client.get_ports(is_physical=True, is_input=True)
+    if not playback:
+        raise RuntimeError('No physical playback ports')
 
-for jackAudioOut in playback:
-    if not "midi" in jackAudioOut.name.lower():
-        client.connect(client.outports[0], jackAudioOut)
+    for jackAudioOut in playback:
+        if not "midi" in jackAudioOut.name.lower():
+            client.connect(client.outports[0], jackAudioOut)
 
 
 
@@ -363,14 +373,15 @@ def create_waveform_plot(time_data, waveform_data, emotionLabels=None, emotionPr
                 if slice_center < duration:
                     label = emotionLabels[i] if i < len(emotionLabels) else "Unknown"
                     printVerbose('emotionProbabilities[i]', emotionProbabilities[i])
-                    textlabel = emotionLabels[i]+" %.1f%%"%(emotionProbabilities[i][emotionLabels[i]]*100) if emotionLabels else ""
+                    textlabel = emotionLabels[i]+"\n%.1f%%"%(emotionProbabilities[i][emotionLabels[i]]*100) if emotionLabels else ""
                     printVerbose('emotions.EMOTIONS_TO_COLOR',emotions.EMOTIONS_TO_COLOR)
                     printVerbose('label',label)
                     printVerbose('label in emotions.EMOTIONS_TO_COLOR.keys():', label in emotions.EMOTIONS_TO_COLOR.keys())
                     facecolor = emotions.EMOTIONS_TO_COLOR[label] if label in emotions.EMOTIONS_TO_COLOR.keys() else 'lightgrey'
-                    plt.text(slice_center, 0.9, textlabel, ha='center', va='center', 
+                    ypos = 0.95 # - (i%4)*0.04
+                    plt.text(slice_center, ypos, textlabel, ha='center', va='center', 
                             bbox=dict(boxstyle="round,pad=0.3", facecolor=facecolor, alpha=0.7),
-                            fontsize=14, fontweight='bold')
+                            fontsize=12)
                 
     
     
@@ -484,6 +495,10 @@ def plot_emotion_graph(emotionProbabilities, startstop, audioduration, figure_si
     xticks = np.arange(overall_start, overall_end + 1, 3)
     ax.set_xticks(xticks, [f"{t:.0f}" for t in xticks], rotation=0)
 
+    # y ticks int(*100)%
+    yticks = np.arange(ax.get_ylim()[0], ax.get_ylim()[1] + 0.1, 0.2)
+    ax.set_yticks(yticks, [f"{int(t * 100)}%" for t in yticks])
+
     # Add vertical dashed lines for each segment
     for start, end in startstop_s:
         ax.axvline(x=start, color='gray', linestyle='--', alpha=0.3, linewidth=0.8)
@@ -548,74 +563,80 @@ def create_spectrogram_plot(time_data, waveform_data, sample_rate, title="Spectr
 
     return plot_url
 
+if RECORD_AUDIO:
+    def track_recording_time():
+        """Track recording time"""
+        global recording_status, recorder, recFilename
 
-def track_recording_time():
-    """Track recording time"""
-    global recording_status, recorder, recFilename
+        if recorder.recording != True:
+            recorder.start()
+        
+        while recording_status["is_recording"]:
+            if recording_status["start_time"]:
+                current_time = time.time()
+                recording_status["duration"] = current_time - recording_status["start_time"]
+            time.sleep(0.1)
+        
+        recorder.stop()
+        timedatestr = datetime.now().strftime("%Y%m%d_%H%M%S")
+        os.makedirs("recordings", exist_ok=True)
+        filename = f"recordings/recording_{timedatestr}.wav"
+        recorder.saveToFile(filename)
+        recorder.clearBuffer()  # Clear buffer after saving
 
-    if recorder.recording != True:
-        recorder.start()
-    
-    while recording_status["is_recording"]:
-        if recording_status["start_time"]:
-            current_time = time.time()
-            recording_status["duration"] = current_time - recording_status["start_time"]
-        time.sleep(0.1)
-    
-    recorder.stop()
-    timedatestr = datetime.now().strftime("%Y%m%d_%H%M%S")
-    os.makedirs("recordings", exist_ok=True)
-    filename = f"recordings/recording_{timedatestr}.wav"
-    recorder.saveToFile(filename)
-    recorder.clearBuffer()  # Clear buffer after saving
-
-    # Lock recFilename and write the filename
-    recFilename = filename
+        # Lock recFilename and write the filename
+        recFilename = filename
 
 @app.route('/')
 def index():
     # Check if we have a waveform to display
     show_waveform = current_waveform is not None and not recording_status["is_recording"]
-    return render_template('index.html', show_waveform=show_waveform)
+    return render_template('index.html', show_waveform=show_waveform, recording_supported=RECORD_AUDIO)
 
 
 @app.route('/start_recording', methods=['POST'])
 def start_recording():
-    """Start the recording process"""
-    global recording_status, current_waveform, waveform_json, recFilename
+    if RECORD_AUDIO:
+        """Start the recording process"""
+        global recording_status, current_waveform, waveform_json, recFilename
 
-    recFilename = None  # Reset filename for new recording
-    waveform_json = None  # Reset waveform JSON data
-    current_waveform = None  # Reset current waveform data
+        recFilename = None  # Reset filename for new recording
+        waveform_json = None  # Reset waveform JSON data
+        current_waveform = None  # Reset current waveform data
 
-    # Clear previous waveform data when starting new recording
-    current_waveform = None
-    
-    recording_status = {
-        "is_recording": True, 
-        "duration": 0, 
-        "start_time": time.time()
-    }
-    
-    # Start recording time tracking in background
-    recording_thread = threading.Thread(target=track_recording_time)
-    recording_thread.daemon = True
-    recording_thread.start()
-    
-    return jsonify({"status": "recording_started"})
+        # Clear previous waveform data when starting new recording
+        current_waveform = None
+        
+        recording_status = {
+            "is_recording": True, 
+            "duration": 0, 
+            "start_time": time.time()
+        }
+        
+        # Start recording time tracking in background
+        recording_thread = threading.Thread(target=track_recording_time)
+        recording_thread.daemon = True
+        recording_thread.start()
+        
+        return jsonify({"status": "recording_started"})
+    else:
+        return jsonify({"status": "recording_not_supported"}), 501
 
 @app.route('/stop_recording', methods=['POST'])
 def stop_recording():
-    """Stop the recording process"""
-    global recording_status
-    
+    if RECORD_AUDIO:
+        """Stop the recording process"""
+        global recording_status
+        
 
-    if recording_status["is_recording"]:
-        recording_status["is_recording"] = False
-        final_duration = recording_status["duration"]
-        return jsonify({"status": "recording_stopped", "duration": final_duration})
+        if recording_status["is_recording"]:
+            recording_status["is_recording"] = False
+            final_duration = recording_status["duration"]
+            return jsonify({"status": "recording_stopped", "duration": final_duration})
+        else:
+            return jsonify({"status": "not_recording"})
     else:
-        return jsonify({"status": "not_recording"})
+        return jsonify({"status": "recording_not_supported"}), 501
     
 
 

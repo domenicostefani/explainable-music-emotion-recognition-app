@@ -38,6 +38,17 @@
 
 body {
 
+    /* vars for emotion colors */
+    --emotion-aggressive-color: #FF6B6B;
+    --emotion-happy-color: #e8cf2e;
+    --emotion-relaxed-color: #96CEB4;
+    --emotion-sad-color: #45B7D1;
+
+    --emotion-darker-aggressive-color: #ac2f2f;
+    --emotion-darker-happy-color: #c9b241;
+    --emotion-darker-relaxed-color: #6ea971;
+    --emotion-darker-sad-color: #4f93a8;
+
     /* max-width: 1200px; */
     margin: 0 auto;
     padding: 20px;
@@ -320,7 +331,7 @@ button:hover {
 
 .chart-container {
     max-width: 70rem;
-    margin: 0 auto;
+    margin: .3rem auto;
 }
 
 .slice-title {
@@ -351,19 +362,21 @@ button:hover {
 }
 
 .bar-chart {
-    width: 100%;
-    max-width: 400px;
+    /* width: 100%; */
+    max-width: 20rem;
+    margin: 0 auto;
 }
 
 .bar-item {
     display: flex;
     align-items: center;
     margin-bottom: 8px;
+    margin-right: 2rem;
     font-size: 14px;
 }
 
 .bar-label {
-    width: 80px;
+    width: 5rem;
     text-align: right;
     margin-right: 10px;
     font-weight: 500;
@@ -409,4 +422,45 @@ button:hover {
     color: #333;
     font-size: 12px;
     font-weight: bold;
+}
+
+.message-box {
+    margin: .8rem auto;
+    text-align: justify;
+    max-width: 30rem;
+}
+
+.show-distribution-btn, .show-waveform-btn, .show-slices-btn {
+    background-color: #606060;
+    margin: 0 auto;
+}
+
+b {
+    font-weight: bold;
+}
+
+.emocolor-aggressive {
+    color: var(--emotion-aggressive-color);
+}
+.emocolor-relaxed {
+    color: var(--emotion-relaxed-color);
+}
+.emocolor-happy {
+    color: var(--emotion-happy-color);
+}
+.emocolor-sad {
+    color: var(--emotion-sad-color);
+}
+
+.emocolor-darker-aggressive {
+    color: var(--emotion-darker-aggressive-color);
+}
+.emocolor-darker-relaxed {
+    color: var(--emotion-darker-relaxed-color);
+}
+.emocolor-darker-happy {
+    color: var(--emotion-darker-happy-color);
+}
+.emocolor-darker-sad {
+    color: var(--emotion-darker-sad-color);
 }
