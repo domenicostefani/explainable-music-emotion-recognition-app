@@ -62,6 +62,12 @@ body {
 
     max-width: 70rem;
     margin: 0 auto;
+
+    
+    /* display: flex;
+    flex-direction: column; */
+    /* align-items: center; */
+    /* justify-content: center; */
 }
 .back-btn {
     background-color: #007bff;
@@ -96,12 +102,17 @@ body {
     gap: 1rem;
     max-width: 100%;
     flex-wrap: wrap;
+    margin: 1rem auto;
 }
 .rec-player {
     display: none;
-    max-width: 100%;
-    margin-top: 1rem;
-    margin-bottom: 1rem;
+    /* max-width: 100%; */
+    /* margin-top: 1rem;
+    margin-bottom: 1rem; */
+
+    max-width: 20rem;
+    margin: .5rem auto;
+    /* padding: 0 auto; */
 }
 
 button {
@@ -190,6 +201,18 @@ button:hover {
     cursor: pointer;
 }
 
+.slice-img img {
+    width: 100%;
+    height: auto;
+}
+
+.slice-img p {
+    margin: 1rem 2rem;
+    padding: .5rem;
+    text-align: center;
+    font-style: italic;
+    border: 1px solid #ddd;
+}
 .slice-overlay {
     position: relative;
     display: inline-block;
@@ -197,14 +220,27 @@ button:hover {
 }
 .slice-button {
     position: absolute;
-    background-color: rgba(255, 255, 0, 0.3);
-    border: 2px dashed black;
     cursor: pointer;
     height: 100%;
+    width: 100px; /* Add explicit width - adjust as needed */
     top: 0;
-    transition: background-color 0.3s;
+    transition: all 0.3s;
+    
+    /* Remove any background-color that might override the gradient */
+    /* background: radial-gradient(ellipse closest-side at center, 
+        #FFFF005D 80%,
+        #ffff0000 100%
+    ); */
+    
+    /* Make it perfectly elliptical */
+    /* border-radius: 50%; */
+    
+    /* Optional: Add a subtle glow effect */
+    /* filter: blur(0.5px);
+    box-shadow: 0 0 10px rgba(255, 255, 0, 0.2); */
 }
-.slice-button:hover {
+
+/* .slice-button:hover {
     background-color: rgba(255, 255, 0, 0.5);
 }
 .slice-button.computing {
@@ -220,7 +256,7 @@ button:hover {
 }
 .slice-button.ready:hover {
     background-color: rgba(0, 255, 0, 0.5);
-}
+} */
 .status {
     margin-top: 10px;
     padding: 10px;
@@ -308,7 +344,6 @@ button:hover {
     flex-direction: column;
     align-items: center;
     background-color: white;
-    padding: .5rem;
     margin: .3rem;
     border-radius: 10px;
 }
@@ -463,4 +498,15 @@ b {
 }
 .emocolor-darker-sad {
     color: var(--emotion-darker-sad-color);
+}
+
+.footer {
+    text-align: center;
+    margin-top: 20px;
+    font-size: 14px;
+    color: #666;
+}
+
+p {
+    margin: .5rem 0;
 }

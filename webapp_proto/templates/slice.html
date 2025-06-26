@@ -4,8 +4,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Audio Slice {{ slice_label }} - Waveform Viewer</title>
-
+    <title>Slice #{{ slice_id }}: {{ slice_label }}</title>
+    <link rel="icon" href="{{ url_for('static', filename='favicon.png') }}" type="image/x-icon">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
@@ -18,7 +18,8 @@
                 <span>({{ slice_start }} - {{ slice_end }} seconds)</span>
             </div>
             <h3>This slice was classified: <span id="emoLabel" style="font-weight: bold;"></span></h3>
-
+        </div>
+            
             <div id="overallEmotion" class="overall-emotion">
                 <div class="emotion-display">
                     <!-- <div class="box-vert-flex">
@@ -63,16 +64,22 @@
                 </div>
             </div>
             
-            <p style="margin-bottom:1px; text-align: center;">Play back the slice</p>
-            <audio id="recPlayer" controls class="rec-player">
-                <source id="recSource" src="" type="audio/wav">
-                Your browser does not support the audio element.
-            </audio>
-        </div>
+
+        <p style="margin-bottom:1px; text-align: center;">Play back the slice</p>
+        <audio id="recPlayer" controls class="rec-player">
+            <source id="recSource" src="" type="audio/wav">
+            Your browser does not support the audio element.
+        </audio>
         
         <div class="slice-container">
-            <img src="data:image/png;base64,{{ plot }}" alt="Waveform Slice {{ slice_label }}" class="slice-img">
-            <img src="data:image/png;base64,{{ spectrogram }}" alt="Spectrogram Slice {{ slice_label }}" class="slice-img">
+            <div class="slice-img">
+                <p>The waveform shows the evolution in time of the audio signal of this 3-second slice</p>
+                <img src="data:image/png;base64,{{ plot }}" alt="Waveform Slice {{ slice_label }}">
+            </div>
+            <div class="slice-img">
+                <p>The spectrogram shows the frequency content of the audio signal of this 3-second slice</p>
+                <img src="data:image/png;base64,{{ spectrogram }}" alt="Spectrogram Slice {{ slice_label }}">
+            </div>
         </div>
     </div>
 
@@ -84,12 +91,14 @@
             console.log("Audio URL:'{{ audio_url }}'");
             recSource.src = "{{ audio_url }}#t={{ slice_start }},{{ slice_end }}";
             recPlayer.load();
-            recPlayer.style.display = "inline-block";
+            recPlayer.style.display = "block";
 
             // Load emotion label
             const emoLabel = document.getElementById("emoLabel");
             let sliceLabel = "{{ slice_label }}";
             emoLabel.textContent = sliceLabel.charAt(0).toUpperCase() + sliceLabel.slice(1);
+            emoLabel.className = emoLabel.className + ` emocolor-darker-${sliceLabel}`;
+
 
             let sliceEmoProbabilities = "{{ emotion_probabilities }}";
             // Transform this string of a dict back to a dict

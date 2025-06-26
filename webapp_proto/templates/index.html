@@ -5,6 +5,26 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Explainable Music Emotion Recognition</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="icon" href="{{ url_for('static', filename='favicon.png') }}" type="image/x-icon">
+    <style>
+        /* Animation styles for gradual unveiling */
+        .rev-box > * { /* Select level1 children of .rev-box */
+            opacity: 0;
+            transform: translateY(20px);
+            transition: opacity 0.8s ease-out, transform 0.8s ease-out;
+        }
+        
+        .rev-box .unveiled {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        
+        .rev-box .instant {
+            opacity: 1;
+            transform: translateY(0);
+            transition: none;
+        }
+    </style>
 </head>
 <body>
     <div class="container", style="text-align: center;">
@@ -46,37 +66,48 @@
                 {% else %}
                 {% endif %}
             </div>
+            
+            <button onclick="resetAnimationState(); startGradualUnveiling()" class="start-animation-btn" id="startAnimationBtn" style="display: inline-block; background-color: #666;">
+                <span>Start Animation</span>
+            </button>
+            <button onclick="console.log('resetting sessionstorage'); sessionStorage.clear(); location.reload()" class="start-animation-btn" style="display: inline-block; background-color: red;">
+                <span>Reset cookies</span>
+            </button>
 
-            <div class="message-box">
-                <p id="message" style="margin: 0">Nice song!</p>
-                <p>We liked your song so much that we ran it through a <b>Neural Network</b> <a href="http://wikipedia.org/wiki/Neural_network" target="_blank">(what is that?)</a> that tries to understand its emotional content.</p>
+            <div class="message-box rev-box" id="messageBox1">
+                <p id="message">Nice song!</p>
+                <p>We liked your song so much that we ran it through a <b>Neural Network</b> <a href="https://en.wikipedia.org/wiki/Neural_network_(machine_learning)" target="_blank">(what is that?)</a> that tries to understand its emotional content.</p>
                 <p>The Artificial model only understands <i>extremes</i>: <b class="emocolor-darker-aggressive">Aggressiveness</b>, <b class="emocolor-darker-happy">Happiness</b>, <b class="emocolor-darker-relaxed">Relaxedness</b>, and <b class="emocolor-darker-sad">Sadness</b>.</p>
 
-                <p>And the winner is...</p>
+                <p>And the winner is... &#x1F941&#x1F941&#x1F941</p>
             </div>
 
-            <div id="overallEmotion" class="overall-emotion">
-                <div>Overall Emotion: <span id="overallEmotionText"></span></div>
+            <div id="overallEmotion" class="overall-emotion rev-box">
+                <p>Overall Emotion: <span id="overallEmotionText"></span></p>
             </div>
 
             
-            <div class="message-box">
+            <div class="message-box rev-box" id="messageBox2">
                 <p>You can listen to it again to see whether you agree or not:</p>
             </div>
                 
             <!-- </div> -->
-            <audio id="recPlayer" controls class="rec-player">
-                <source id="recSource" src="" type="audio/wav">
-                Your browser does not support the audio element.
-            </audio>
+            <div class="rev-box">
+                <audio id="recPlayer" controls class="rec-player">
+                    <source id="recSource" src="" type="audio/wav">
+                    Your browser does not support the audio element.
+                </audio>
+            </div>
 
-            <div class="message-box" id="dist-emo-infobox">
+            <div class="message-box rev-box" id="dist-emo-infobox">
                 <p>Want to know more about how shure the model was? Click the <b>Show Distribution</b> button below.
             </div>
 
-            <button class="show-distribution-btn" id="showDistributionBtn" onclick="showBarChart(this)">
-                <span>Show Distribution</span>
-            </button>
+            <div class="rev-box">
+                <button class="show-distribution-btn" id="showDistributionBtn" onclick="showBarChart(this)">
+                    <span>Show Distribution</span>
+                </button>
+            </div>
 
             <div class="bar-chart-container">
                 <p><b>Emotion Distribution</b></p>
@@ -113,12 +144,15 @@
             </div>
 
             
-            <div class="message-box below-bar-chart">
-                <p>But we can tell you more. This AI model (the neural network) looks at pieces of 3 seconds of audio at a time, so we can show you what the model
-                thought about each piece of the song.</p>
+            <div class="message-box below-bar-chart" id="messageBox3">
+                <p>But we can tell you more.</p>
+                <p>
+                    This AI model (the neural network) looks at pieces of 3 seconds of audio at a time, so we can show you what the model
+                    thought about each part of the song.
+                </p>
             </div>
 
-            <button class="show-waveform-btn below-bar-chart" id="showWaveformBtn" onclick="showWaveform(this)">
+            <button class="show-waveform-btn below-bar-chart" id="showWaveformBtn" onclick="unveilWaveform(this)">
                 <span>Show Waveform</span>
             </button>
 
@@ -130,8 +164,48 @@
                 <div class="slice-overlay">
                     <img id="waveformImg" class="waveform-img" alt="Waveform">
                     <!-- Slice buttons will be added dynamically -->
+
+                    <style>
+                        .speech-balloon {
+                            position: absolute;
+                            top: 60%;
+                            left: 10%;
+                            background: #fff9d4;
+                            border: 3px solid #333;
+                            border-radius: 20px;
+                            padding: 15px 20px;
+                            font-size: 16px;
+                            max-width: 20rem;
+                            color: #333;
+                            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+                            text-align: center;
+                            z-index: 10;
+                            animation: bounce 2s ease-in-out infinite;
+                            cursor: pointer;
+                        }
+
+                        .speech-balloon::hover {
+                            filter: brightness(80%);
+                        }
+
+                        /* Balloon tail/pointer */
+                        /* .speech-balloon::after {
+                            content: '';
+                            position: absolute;
+                            width: 0;
+                            height: 0;
+                            border-style: solid;
+                        } */
+
+                    </style>
+
+                    <button class="speech-balloon center-balloon balloon-bottom-left" onclick="this.style.display='none'">
+                        Click on any slice to get more info
+                    </button>
                 </div>
             </div>
+
+
                 
             <div class="chart-container below-bar-chart below-waveform" id="emotionChartImgBox">
                 <p>And since your song contains multiple slices, you can check out how the <b>model's confidence</b> changes <b>through time</b></p>
@@ -146,11 +220,81 @@
         </div>
     </div>
 
+    <div class="footer">
+        Made by <a href="https://github.com/michelerossi1" target="_blank">Michele Rossi</a> and <a href="https://domenicostefani.com/" target="_blank">Domenico Stefani</a> @ CIMIL, University of Trento, Italy.
+    </div>
+
     <script>
+        // Animation control variables
+        // let animationStarted = false;
+        sessionStorage.setItem('animationStarted', 'false'); // Initialize animation state in sessionStorage
+        let animationTimeouts = [];
 
         // if showSliceButtons is not a sessionStorage item, set it to false
         if (!sessionStorage.getItem('showSliceButtons')) {
+            console.log('showSliceButtons not found in sessionStorage, setting to false');
             sessionStorage.setItem('showSliceButtons', 'false');
+        }
+
+
+        function clearAllAnimationTimeouts() {
+            animationTimeouts.forEach(timeout => clearTimeout(timeout));
+            animationTimeouts = [];
+        }
+
+        function resetAnimationState() {
+            // animationStarted = false;
+            sessionStorage.setItem('animationStarted', 'false');
+            clearAllAnimationTimeouts();
+            
+            // Reset all paragraphs to hidden state
+            document.querySelectorAll('.rev-box > *').forEach(p => {
+                p.classList.remove('unveiled', 'instant');
+            });
+        }
+
+        function startGradualUnveiling() {
+            console.log('startGradualUnveiling called');
+            const animationStarted = sessionStorage.getItem('animationStarted') === 'true';
+            if (animationStarted) return;
+            // animationStarted = true;
+            sessionStorage.setItem('animationStarted', 'true');
+            console.log('Starting gradual unveiling animation');
+            let totalDelay = 0;
+
+            // const messageBoxes = ['messageBox1', 'overallEmotion', 'messageBox2', 'dist-emo-infobox'];
+            const revealableBoxes = document.querySelectorAll('.rev-box'); // Select all elements with class "rev-box"
+            const messageBoxes = Array.from(revealableBoxes)
+
+            messageBoxes.forEach((box, index) => {
+                if (box && box.style.display !== 'none') {
+                    // const paragraphs = box.querySelectorAll('p');
+                    // console.log('Found', paragraphs.length, 'paragraphs in', boxId);
+
+                    // Instead of paragraphs, select all level1 children of the box
+                    const children = box.children; // Get all direct children of the box
+
+                    // Log how many children were found and thefirst line of the html of the box
+                    // console.log(`Found ${children.length} children in box ${box.id || index + 1}:`, box.outerHTML.split('\n')[0]);
+
+                    // For each child, add the unveiled class with a delay
+                    Array.from(children).forEach((child, index) => {
+                        const timeout = setTimeout(() => {
+                            child.classList.add('unveiled');
+                        }, totalDelay);
+                        animationTimeouts.push(timeout);
+                        totalDelay += 1000; // 1 second intervals
+                    });
+                    
+                    // paragraphs.forEach((p, index) => {
+                    //     const timeout = setTimeout(() => {
+                    //         p.classList.add('unveiled');
+                    //     }, totalDelay);
+                    //     animationTimeouts.push(timeout);
+                    //     totalDelay += 3000; // 3 second intervals
+                    // });
+                }
+            });
         }
 
         function showBarChart(elem) {
@@ -164,16 +308,25 @@
             // Show all below-bar-chart elements
             const belowBarChartElements = document.querySelectorAll('.below-bar-chart');
             belowBarChartElements.forEach(el => {
-
                 // show only if below-waveform is not part of the class
                 if (!el.classList.contains('below-waveform')) {
                     el.style.display = 'block';
+                    
+                    // // If this is messageBox3, start its animation or show instantly
+                    // if (el.id === 'messageBox3') {
+                    //     const paragraphs = el.querySelectorAll('p');
+                    //     if (animationStarted) {
+                    //         // If main animation has started, show instantly
+                    //         paragraphs.forEach(p => p.classList.add('instant'));
+                    //     } else {
+                    //         // If main animation hasn't started, it will be handled by the main animation
+                    //     }
+                    // }
                 }
             });
-            
         }
 
-        function showWaveform(elem) {
+        function unveilWaveform(elem) {
             console.log('Show Waveform button clicked');
             document.querySelector('.slice-overlay').style.display = 'block';
 
@@ -182,19 +335,41 @@
             sessionStorage.setItem('showSliceButtons', 'false');
             document.querySelector('.slice-overlay').scrollIntoView({ behavior: 'smooth', block: 'center' });
 
-            // Show all below-waveform elements
+            const slicesLength = sessionStorage.getItem('slicesLength');
+            console.log('SessionStorage slicesLength:', slicesLength);
+            const showPerSliceEmoChart = (slicesLength && parseInt(slicesLength) > 1) ? true : false;
+
+            // Show all below-waveform elements, except for id "'emotionChartImgBox'" that is shown only if showPerSliceEmoChart is true
             document.querySelectorAll('.below-waveform').forEach(el => {
-                el.style.display = 'block';
+                if (el.id === 'emotionChartImgBox' && !showPerSliceEmoChart) {
+                    el.style.display = 'none';
+                } else {
+                    el.style.display = 'block';
+                }
+                // el.style.display = 'block';
             });
 
             document.querySelectorAll('.slice-button').forEach(el => {
                 el.style.display = 'none';
             });
+            document.getElementById('sliceStatus').style.display = 'none';
+
+
+            // if (slicesLength && parseInt(slicesLength) > 1) {
+            //     if (sessionStorage.getItem('showWaveform') === 'true') {
+            //         console.log('showWaveform is true, displaying emotion chart');
+            //         emotionChartImgBox.style.display = 'block';
+            //     } else {
+            //         console.log('showWaveform is false, hiding emotion chart');
+            //         emotionChartImgBox.style.display = 'none';
+            //     }
+            // }
+
         }
 
-
-
+        // Handle initial state based on sessionStorage
         if (sessionStorage.getItem('showDistribution') === 'true') {
+            console.log('showDistribution is true, showing bar chart');
             document.querySelector('.bar-chart-container').style.display = 'block';
             document.getElementById('showDistributionBtn').style.display = 'none';
             document.getElementById('dist-emo-infobox').style.display = 'none';
@@ -203,8 +378,21 @@
             const belowBarChartElements = document.querySelectorAll('.below-bar-chart');
             belowBarChartElements.forEach(el => {
                 el.style.display = 'block';
+                
+                // Show message box paragraphs instantly if they're visible
+                if (el.classList.contains('rev-box')) {
+                    // const paragraphs = el.querySelectorAll('p');
+                    // paragraphs.forEach(p => p.classList.add('instant'));
+
+                    // Add instant to ALL 1st level children of the box
+                    Array.from(el.children).forEach(child => {
+                        console.log('Adding instant class to child:', child);
+                        child.classList.add('instant');
+                    });
+                }
             });
         } else {
+            console.log('showDistribution is false, hiding bar chart');
             document.querySelector('.bar-chart-container').style.display = 'none';
 
             // hide all elements with class "below-bar-chart"
@@ -215,6 +403,7 @@
         }
         
         if (sessionStorage.getItem('showWaveform') === 'true') {
+            console.log('showWaveform is true, showing waveform');
             document.querySelector('.slice-overlay').style.display = 'block';
             document.getElementById('showWaveformBtn').style.display = 'none';
 
@@ -223,12 +412,19 @@
                 el.style.display = 'block';
             });
 
-            // Hide all elements with class "slice-button"
-            console.log('Hiding slice buttons');
-            document.querySelectorAll('.slice-button').forEach(el => {
-                el.style.display = 'none';
-            });
+            if (sessionStorage.getItem('showSliceButtons') === 'true') { // Show all slice buttons
+                console.log('Showing slice buttons based on sessionStorage');
+                document.querySelectorAll('.slice-button').forEach(el => { el.style.display = 'block'; });
+                document.getElementById('sliceStatus').style.display = 'block';
+                console.log('Hiding "show slices" button based on sessionStorage');
+                document.getElementById('showSlicesBtn').style.display = 'none';
+            } else { // Hide all slice buttons
+                console.log('Hiding slice buttons based on sessionStorage');
+                document.querySelectorAll('.slice-button').forEach(el => { el.style.display = 'none'; });
+                document.getElementById('sliceStatus').style.display = 'none';
+            }
         } else {
+            console.log('showWaveform is false, hiding waveform');
             document.querySelector('.slice-overlay').style.display = 'none';
             // hide all elements with class "below-waveform"
             document.querySelectorAll('.below-waveform').forEach(el => {
@@ -239,10 +435,13 @@
         function showSlices(elem) {
             console.log('Show Slices button clicked');
             // Show all slice buttons
-            document.querySelectorAll('.slice-button').forEach(el => {
-                el.style.display = 'block';
-            });
+
+            console.log('Showing slice buttons');
+            document.querySelectorAll('.slice-button').forEach(el => { el.style.display = 'block'; });
+            document.getElementById('sliceStatus').style.display = 'block';
+
             // elem.style.display = 'none';
+            console.log('Setting sessionStorage for showSliceButtons to true');
             sessionStorage.setItem('showSliceButtons', 'true');
             document.querySelector('.slice-overlay').scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
@@ -329,9 +528,12 @@
         }
 
         function clearRec() {
+            // Reset animation state when clearing
+            resetAnimationState();
+            
             // if (newRecordingBtn) newRecordingBtn.style.display = 'block';
             if (recordBtn)
-                recordBtn.style.display = 'inline-block';
+                recordBtn.style.display = 'block';
             loadBtn.style.display = 'inline-block';
             initialInfobox.style.display = 'block';
             if (clearBtn) clearBtn.style.display = 'none';
@@ -353,9 +555,12 @@
                 });
 
             // ALso, reset sessionStorage items that show/hide elements
-            sessionStorage.removeItem('showDistribution');
-            sessionStorage.removeItem('showWaveform');
-            sessionStorage.removeItem('showSliceButtons');
+            // sessionStorage.removeItem('showDistribution');
+            // sessionStorage.removeItem('showWaveform');
+            // sessionStorage.removeItem('showSliceButtons');
+            sessionStorage.setItem('showWaveform', 'false');
+            sessionStorage.setItem('showSliceButtons', 'false');
+            sessionStorage.setItem('showDistribution', 'false');
         }
 
         // Load existing waveform if available
@@ -366,9 +571,12 @@
         {% endif %}
 
         function startNewRecording() {
+            // Reset animation state
+            resetAnimationState();
+            
             // Reset the interface for new recording
             if(recordBtn)
-                recordBtn.style.display = 'inline-block';
+                recordBtn.style.display = 'block';
             loadBtn.style.display = 'inline-block';
             initialInfobox.style.display = 'block';
 
@@ -397,6 +605,11 @@
                         // showStatus(`Recording complete! Duration: ${data.duration.toFixed(1)}s. Click on a section to zoom in.`, 'ready');
                         // showStatus(`Recording complete!`, 'ready');
                         startSliceStatusMonitoring();
+                        
+                        // Show paragraphs instantly if page is reloaded with existing waveform
+                        document.querySelectorAll('.rev-box > *').forEach(p => {
+                            p.classList.add('instant');
+                        });
                     }
                 });
         }
@@ -490,6 +703,27 @@
             }, 100);
         }
 
+        // function getBcgColor(startingColor){
+        //     // const bcgcolor = 'background: radial-gradient(ellipse closest-side at center, \n\
+        //     //             rgba(255, 255, 0, 0.4) 80%,     /* Full opacity at center */\n\
+        //     //             rgba(255, 255, 0, 0) 100%      /* Completely transparent at edges */\n\
+        //     //         );';
+
+        //     console.log('Generating background color with starting color:', startingColor);
+        //     let col = `radial-gradient(ellipse closest-side at center, ${addAlpha(startingColor, 1)} 80%, ${addAlpha(startingColor, 0)} 100% );`;
+
+        //     console.log('Generated background color:', col);
+        //     return col;
+        // }
+
+        function getBcgColor(startingColor){
+            // console.log('Generating background color with starting color:', startingColor);
+            // let col = `radial-gradient(ellipse closest-side at center, ${addAlpha(startingColor, 1)} 80%, ${addAlpha(startingColor, 0)} 100%)`;
+            col = `radial-gradient(ellipse closest-side at center, ${addAlpha(startingColor, 0.7)} 20%, transparent 100%)`;
+            // console.log('Generated background color:', col);
+            return col;
+        }
+
         function startSliceStatusMonitoring() {
             // sliceStatus.style.display = 'block'; //TODO: see whether to enable this again
             sliceStatusInterval = setInterval(() => {
@@ -563,10 +797,18 @@
                         // } else {
                         //     newRecordingBtn.style.display = 'inline-block';
                         // }
-                        clearBtn.style.display = 'inline-block';
+                        if (clearBtn) 
+                            clearBtn.style.display = 'inline-block';
 
                         showStatus(`Recording complete!`, 'ready');
-                        location.reload();
+                        
+                        // Start the gradual unveiling animation
+                        setTimeout(() => {
+                            startGradualUnveiling();
+                        }, 1000); // Start after 1 second delay
+                        
+                        // Don't reload the page - let the animation play
+                        // location.reload();
                     }
                     else {
                         showStatus(`Error: ${data.message}`, 'error');
@@ -580,15 +822,38 @@
             return color + _opacity.toString(16).toUpperCase();
         }
 
+        function darker(color, amount) {
+            // Ensure the color is in hex format
+            if (color.startsWith('#')) {
+                color = color.slice(1);
+            }
+            // Convert to RGB
+            let r = parseInt(color.slice(0, 2), 16);
+            let g = parseInt(color.slice(2, 4), 16);
+            let b = parseInt(color.slice(4, 6), 16);
+
+            // Darken the color
+            r = Math.max(0, Math.min(255, r - amount));
+            g = Math.max(0, Math.min(255, g - amount));
+            b = Math.max(0, Math.min(255, b - amount));
+
+            // Convert back to hex
+            return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
+        }
+
         function displayWaveform(data) {
             // console.log('Displaying waveform data:', data);
             waveformImg.src = 'data:image/png;base64,' + data.plot;
+            sessionStorage.setItem('slicesLength', data.slices.length);
+            console.log('!!!!!!!!!!!!!!!!SessionStorage slicesLength set to:', data.slices.length);
             if (data.slices.length > 1){
                 emotionChartImg.src = 'data:image/png;base64,' + data.emotion_chart;
                 // emotionChartImgBox.style.display = 'block';
                 if (sessionStorage.getItem('showWaveform') === 'true') {
+                    console.log('showWaveform is true, displaying emotion chart');
                     emotionChartImgBox.style.display = 'block';
                 } else {
+                    console.log('showWaveform is false, hiding emotion chart');
                     emotionChartImgBox.style.display = 'none';
                 }
             }else{
@@ -652,36 +917,67 @@
             
             // Remove existing slice buttons
             const existingButtons = overlay.querySelectorAll('.slice-button');
+            // console.log('Removing', existingButtons.length, 'existing slice buttons'); 
             existingButtons.forEach(btn => btn.remove());
             
             // Add new slice buttons based on actual duration
             const numSlices = data.slices.length;
+
+            // console.log(`Adding ${numSlices} slice buttons based on data`);
             
+            // console.log('sessionStorage showSliceButtons:', sessionStorage.getItem('showSliceButtons'));
+            // console.log("(sessionStorage.getItem('showSliceButtons')) && (sessionStorage.getItem('showSliceButtons') === 'true')", (sessionStorage.getItem('showSliceButtons')) && (sessionStorage.getItem('showSliceButtons') === 'true'));
+
+            if (sessionStorage.getItem('showSliceButtons') === 'true') {
+                document.getElementById('sliceStatus').style.display = 'block';
+            } else {
+                document.getElementById('sliceStatus').style.display = 'none';
+            }
+
+            let acc = 0
             for (let i = 0; i < numSlices; i++) {
                 const sliceBtn = document.createElement('div');
                 sliceBtn.className = 'slice-button';
-                if (sessionStorage.getItem('showSliceButtons' === false)) {
-                    sliceBtn.style.display = 'none';
-                } else {
+                if ((sessionStorage.getItem('showSliceButtons')) && (sessionStorage.getItem('showSliceButtons') === 'true')) {
+                    // console.log('Slice button', i, 'is visible based on sessionStorage');
                     sliceBtn.style.display = 'block';
-                }
+                } else if (sessionStorage.getItem('showSliceButtons')) {
+                    // console.log('Slice button', i, 'is hidden based on sessionStorage');
+                    sliceBtn.style.display = 'none';
+                } 
+
                 // sliceBtn.style.display = 'none';
-                sliceBtn.style.backgroundColor = addAlpha(data.slices[i].color, 0.2) || 'rgba(255, 255, 0, 0.3)';
-                sliceBtn.style.left = data.slices[i].left * 100 + '%';
-                sliceBtn.style.width = data.slices[i].width * 100 + '%';
+                // sliceBtn.style.backgroundColor = addAlpha(data.slices[i].color, 0.2) || 'rgba(255, 255, 0, 0.3)';
+
+                let bg = getBcgColor(data.slices[i].color)
+                sliceBtn.style.background = bg;
+                // let testGradient1 = "radial-gradient(circle, red, blue)";
+                // sliceBtn.style.background = testGradient1;
+
+                let computedStyle = window.getComputedStyle(sliceBtn);
+                const leftfact = 0.009;
+                sliceBtn.style.left = (data.slices[i].left+leftfact-acc) * 100.0 + '%';
+
+                const fact = 0.956;
+                sliceBtn.style.width = data.slices[i].width * 100.0 * fact + '%';
+                console.log(`Adding slice button ${i} with position: left ${sliceBtn.style.left}%, width ${sliceBtn.style.width}%`);
                 sliceBtn.title = `Click to view slice ${data.slices[i].label}`;
                 sliceBtn.addEventListener('click', () => {
                     window.location.href = `/slice/${i}`;
                 });
 
+                acc += data.slices[i].width - data.slices[i].width * fact; // Accumulate width for next slice button
+
+                
+
                 // Add event listener for hover effect
                 sliceBtn.addEventListener('mouseover', () => {
                     if (!sliceBtn.classList.contains('computing')) {
-                        sliceBtn.style.backgroundColor = addAlpha(data.slices[i].color, 0.5);
+                        sliceBtn.style.background = getBcgColor(darker(data.slices[i].color,70));
                     }
                 });
                 sliceBtn.addEventListener('mouseout', () => {
-                    sliceBtn.style.backgroundColor = addAlpha(data.slices[i].color, 0.2);
+                    sliceBtn.style.background = getBcgColor(data.slices[i].color);
                 });
 
                 overlay.appendChild(sliceBtn);

@@ -25,7 +25,7 @@ def sox_length(path):
 CLASSIFIER_SR = 22050  # Sample rate for classifier
 HIGHRES_SR = 48000  # Sample rate for high-resolution audio
 
-RECORD_AUDIO = False
+RECORD_AUDIO = True
 
 if RECORD_AUDIO:
     import jack
@@ -326,33 +326,19 @@ def create_waveform_plot(time_data, waveform_data, emotionLabels=None, emotionPr
 
     x_min, x_max = ax.get_xlim()
     # print(f"x_min: {x_min}, x_max: {x_max}")
-    trans = ax.transData.transform
     sliceBoundaries = []
 
     # // xticks every sliceDuration/2, starting from sliceStart
     x_ticks = np.arange(max(sliceStart, time_data[0]), time_data[-1]*1.1, sliceDuration/2.0)
     ax.set_xticks(x_ticks)
+
+    # plt.tight_layout()
+
+    trans = ax.transData.transform
     
     if emotionLabels is not None:
         assert emotionProbabilities is not None, "Emotion probabilities must be provided if emotion labels are given"
         assert len(emotionLabels) == len(emotionProbabilities), "Emotion labels and probabilities must have the same length"
-        # get pixel boundaries for each emotion label
-        right_bound_pixel, _ = trans((x_max, 0))
-        left_bound_pixel, _ = trans((x_min, 0))
-        for i, (label, probabilities) in enumerate(zip(emotionLabels, emotionProbabilities)):
-            assert len(probabilities) == len(emotions.EMOTIONS), "Probabilities must match the number of emotions"
-            time_left = i * 3  # 3 seconds per slice
-            time_right = (i + 1) * 3
-            slice_left, _ = trans((time_left, 0))
-            slice_right, _ = trans((time_right, 0))
-
-            def floatMap (x, in_min, in_max, out_min, out_max):
-                """Map a float from one range to another"""
-                return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
-
-            relative_left_px = floatMap(slice_left, left_bound_pixel, right_bound_pixel, 0, 1)
-            relative_right_px = floatMap(slice_right, left_bound_pixel, right_bound_pixel, 0, 1)
-            sliceBoundaries.append((relative_left_px, relative_right_px))
 
         # Add slice boundaries and labels for full waveform
         if highlight_slice is None and len(time_data) > 0 and not simple:
@@ -382,11 +368,45 @@ def create_waveform_plot(time_data, waveform_data, emotionLabels=None, emotionPr
                     plt.text(slice_center, ypos, textlabel, ha='center', va='center', 
                             bbox=dict(boxstyle="round,pad=0.3", facecolor=facecolor, alpha=0.7),
                             fontsize=12)
-                
-    
-    
-    plt.tight_layout()
-    
+                    
+        # get pixel boundaries for each emotion label
+        right_bound_pixel, _ = trans((x_max, 0))
+        left_bound_pixel, _ = trans((x_min, 0))
+        for i, (label, probabilities) in enumerate(zip(emotionLabels, emotionProbabilities)):
+            assert len(probabilities) == len(emotions.EMOTIONS), "Probabilities must match the number of emotions"
+            time_left = i * 3  # 3 seconds per slice
+            time_right = (i + 1) * 3
+            slice_left, _ = trans((time_left, 0))
+            slice_right, _ = trans((time_right, 0))
+
+            def floatMap (x, in_min, in_max, out_min, out_max):
+                """Map a float from one range to another"""
+                return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
+
+            relative_left_px = floatMap(slice_left, left_bound_pixel, right_bound_pixel, 0.0, 1.0)
+            relative_right_px = floatMap(slice_right, left_bound_pixel, right_bound_pixel, 0.0, 1.0)
+            print("(Old boundary for slice %d would have been [%.2f, %.2f])" % (i,relative_left_px, relative_right_px))
+            sliceBoundaries.append((relative_left_px, relative_right_px))
+
+        # fig_trans = fig.transFigure.inverted().transform
+        # bbox = ax.get_position()  # Get axes position in figure coordinates
+
+        # # Convert data coordinates to figure coordinates
+        # for i, (label, probabilities) in enumerate(zip(emotionLabels, emotionProbabilities)):
+        #     time_left = i * sliceDuration + sliceStart
+        #     time_right = (i + 1) * sliceDuration + sliceStart
+            
+        #     # Convert to display coordinates first
+        #     slice_left_disp, _ = ax.transData.transform((time_left, 0))
+        #     slice_right_disp, _ = ax.transData.transform((time_right, 0))
+            
+        #     # Then to figure coordinates
+        #     slice_left_fig, _ = fig_trans((slice_left_disp, 0))
+        #     slice_right_fig, _ = fig_trans((slice_right_disp, 0))
+            
+        #     print("New boundary for slice %d: [%.2f, %.2f]" % (i, slice_left_fig, slice_right_fig))
+        #     sliceBoundaries.append((slice_left_fig, slice_right_fig))
+
     if display:
         plt.show()
     # Convert plot to base64 string
