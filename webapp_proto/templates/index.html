@@ -29,15 +29,13 @@
 <body>
     <header class="header">
         <div class="logo">Explainable Music Emotion Recognition</div>
-        <button class="dark-mode-toggle" onclick="toggleDarkMode()">
+        <a class="dark-mode-toggle" onclick="toggleDarkMode()">
             <span id="theme-icon">🌙</span>
             <span id="theme-text">Dark Mode</span>
-        </button>
+        </a>
     </header>
 
     <div class="container", style="text-align: center;">
-        <!-- <h1>Explainable Music Emotion Recognition</h1> -->
-        
         <p id="initialInfobox" {% if show_waveform %}style="display: none;"{% endif %}>
             {% if recording_supported %}
                 Record or load
@@ -54,6 +52,10 @@
             <button id="loadBtn" class="load-btn"     {% if show_waveform %}style="display: none;"{% endif %}>Load Audio</button>
             <button id="stopBtn" class="record-btn" style="background-color: #666; display: none;">Stop</button>
             
+        </div>
+
+        <div class="loader-container-1" >
+            <div class="loader"></div>
         </div>
         
         <div id="timer" style="font-size: 24px; font-weight: bold; margin: 10px 0; display: none;">
@@ -624,27 +626,39 @@
                 });
         }
 
+        
+
         function loadAudio() {
+            sessionStorage.clear(); // Clear sessionStorage to reset state
             console.log('Loading audio file...');
             const input = document.createElement('input');
             input.type = 'file';
             input.accept = 'audio/wav';
             input.onchange = function(event) {
                 const file = event.target.files[0];
+                showLoading(true,1); // Show loading animation
 
                 if (file) {
                     showStatus('Uploading audio file...', 'loading');
                     
                     const formData = new FormData();
                     formData.append('audio_file', file);  // Send the actual file, not just the name
-                    
+
                     fetch('/upload_audio', {  // Changed endpoint name for clarity
                         method: 'POST',
                         body: formData  // Don't set Content-Type header - let browser set it with boundary
                     })
-                    .then(response => response.json())
+                    .then(response => {
+                        if (!response.ok) {
+                            showLoading(false,1); // Hide loading animation
+                            throw new Error('Network response was not ok');
+                        }
+                        
+                        return response.json();
+                    })
                     .then(data => {
                         console.log('Audio file uploaded:', data);
+                        showLoading(false,1); // Hide loading animation
                         if (data.status === 'success') {
                             showStatus(`Loaded audio file: ${file.name}`, 'ready');
                             loadBtn.style.display = 'none';
@@ -794,19 +808,7 @@
                         
                         // Start monitoring slice computation
                         startSliceStatusMonitoring();
-
                         
-                        // Show "New Recording" button
-                        // if (!newRecordingBtn) {
-                        //     const newBtn = document.createElement('button');
-                        //     newBtn.id = 'newRecordingBtn';
-                        //     newBtn.className = 'new-recording-btn';
-                        //     newBtn.textContent = 'New Recording';
-                        //     newBtn.addEventListener('click', startNewRecording);
-                        //     document.querySelector('.controls').appendChild(newBtn);
-                        // } else {
-                        //     newRecordingBtn.style.display = 'inline-block';
-                        // }
                         if (clearBtn) 
                             clearBtn.style.display = 'inline-block';
 
@@ -816,9 +818,6 @@
                         setTimeout(() => {
                             startGradualUnveiling();
                         }, 1000); // Start after 1 second delay
-                        
-                        // Don't reload the page - let the animation play
-                        // location.reload();
                     }
                     else {
                         showStatus(`Error: ${data.message}`, 'error');
@@ -973,6 +972,10 @@
                 console.log(`Adding slice button ${i} with position: left ${sliceBtn.style.left}%, width ${sliceBtn.style.width}%`);
                 sliceBtn.title = `Click to view slice ${data.slices[i].label}`;
                 sliceBtn.addEventListener('click', () => {
+                    // set lime_unveiled and lime_computed to false (sesisonStorage)
+                    sessionStorage.setItem('lime_unveiled', 'false');
+                    sessionStorage.setItem('lime_computed', 'false');
+                    console.log(`Slice button ${i} clicked, navigating to /slice/${i}`);
                     window.location.href = `/slice/${i}`;
                 });
 

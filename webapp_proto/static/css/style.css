@@ -181,12 +181,16 @@ button:hover {
 
 .record-btn {
     background-color: #ff4444;
+    min-width: 15rem;
 }
 
 
 .load-btn {
     background-color: rgb(51, 180, 39);
+    min-width: 15rem;
 }
+
+
 
 .record-btn:disabled {
     background-color: #cccccc;
@@ -344,6 +348,7 @@ button:hover {
     display: flex;
     justify-content: center;
     gap: 2rem;
+    flex-direction: row;
 }
 
 
@@ -386,6 +391,12 @@ button:hover {
     }
     .waveform-img, .slice-img {
         width: 100%;
+    }
+
+    .controls {
+        flex-direction: column;
+        align-items: center;
+        gap: .3rem;
     }
     
 
@@ -626,4 +637,24 @@ p {
     flex-direction: row;
     align-items: center;
     gap: 1.5rem;
+}
+
+.loader {
+    width: 50px;
+    height: 50px;
+    border: 5px solid #e0e0e0;
+    border-top: 5px solid #3498db;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.loader-container-1 {
+    display: none;
+    justify-content: center;
+    align-items: center;
 }

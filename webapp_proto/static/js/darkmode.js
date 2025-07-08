@@ -24,3 +24,29 @@ function updateThemeToggle(theme) {
         themeText.textContent = 'Dark Mode';
     }
 }
+
+
+
+
+
+function showLoading(show, which) {
+    let classname = '.loader-container';
+
+    if (which === 1)
+        classname = classname + '-1';
+    else if (which === 2)
+        classname = classname + '-2';
+
+    // All elements with class "loader-container"
+    const loaderContainers = document.querySelectorAll(classname);
+    console.log('Found ' + loaderContainers.length + ' loader containers');
+    loaderContainers.forEach(container => {
+        container.style.display = show ? 'flex' : 'none';
+        if (show) {
+            console.log('Showing loader container');
+        } else {
+            console.log('Hiding loader container');
+        }
+    });
+
+}

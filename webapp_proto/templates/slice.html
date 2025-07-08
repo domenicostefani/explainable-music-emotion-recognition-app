@@ -15,10 +15,10 @@
             <div class="logo">Slice #{{ slice_id }}</div>
             <span>({{ slice_start }} - {{ slice_end }} seconds)</span>
         </div>
-        <button class="dark-mode-toggle" onclick="toggleDarkMode()">
+        <a class="dark-mode-toggle" onclick="toggleDarkMode()">
             <span id="theme-icon">🌙</span>
             <span id="theme-text">Dark Mode</span>
-        </button>
+        </a>
     </header>
     <div class="container">
         
@@ -27,7 +27,7 @@
                 <h1>Slice #{{ slice_id }}</h1>
                 <span>({{ slice_start }} - {{ slice_end }} seconds)</span>
             </div> -->
-            <h3>This slice was classified: <span id="emoLabel" style="font-weight: bold;"></span></h3>
+            <h3>This slice was classified: <span class="emoLabel" style="font-weight: bold;"></span></h3>
         </div>
             
             <div id="overallEmotion" class="overall-emotion">
@@ -103,10 +103,13 @@
             </div>
         </div>
 
+        <div class="loader-container-1" >
+            <div class="loader"></div>
+        </div>
         <div id="limebox">
             <div class="slice-img-full">
                 <p>This spectrogram has been analyzed by LIME</p>
-                <p>The darker red area of the spectrogram is the area that, according to the classifier, most represent the emption <b>Relaxed</b> in this slice.</p>
+                <p>The darker red area of the spectrogram is the area that, according to the classifier, most represent the emotion <b class="emoLabel"></b> in this slice.</p>
                 <img src="" id="limespec" alt="LIME Spectrogram for Slice {{ slice_label }}">
             </div>
             <div class="slice-img-full">
@@ -125,7 +128,6 @@
 
 
     <script>
-
         function computeOrGetLime (url){
             fetch(url, {
                 method: 'GET',
@@ -135,12 +137,19 @@
                     throw new Error('Network response was not ok');
                 }
                 console.log("LIME explanation request sent successfully.");
+
+                // Show loading message in limebox
+
+
                 return response.json();
             })
             .then(data => {
                 console.log("LIME explanation data received:", data);
                 // Redirect to the LIME explanation page
                 // window.location.href = `/lime_explanation/${sliceId}`;
+                
+                showLoading(false,1);
+                showLimeBox(true);
 
                 // get id limespec
                 const limeSpec = document.getElementById("limespec");
@@ -153,19 +162,32 @@
             })
         }
 
-        function unveilLIME() {
+        function showLimeBox(show) {
+            console.log("showLimeBox called with show:", show);
+            const limeBox = document.getElementById("limebox");
+            if (show) {
+                limeBox.style.display = "block";
+            } else {
+                limeBox.style.display = "none";
+            }
+        }
 
+        function unveilLIME() {
             sessionStorage.setItem("lime_unveiled", "true");
 
             // Show the LIME box
-            const limeBox = document.getElementById("limebox");
-            limeBox.style.display = "block";
+            let limeComputed = sessionStorage.getItem("lime_computed");
+            if (limeComputed === "true") {
+                showLimeBox(true);
+            }
+
             // Show rec-player (elements of class="rec-player")
             players = document.querySelectorAll(".rec-player");
             players.forEach(player => {
                 player.style.display = "block";
             });
         }
+
 
         window.addEventListener('load', function() {
             // loadExistingWaveform();
@@ -184,8 +206,7 @@
                 } else {
                     // Hide the LIME box
                     console.log("Hiding LIME box, not unveiled yet.");
-                    const limeBox = document.getElementById("limebox");
-                    limeBox.style.display = "none";
+                    showLimeBox(false);
                 }
             } else {
                 // LIME has not been computed yet, so we will compute it now
@@ -193,6 +214,15 @@
                 const sliceId = "{{ slice_id }}";
                 const url = `/get_lime_plot/${sliceId}`;
 
+                if (limeUnveiled === "true") {
+                    // If LIME has already been unveiled, we can show the loading indicator
+                    console.log("LIME already unveiled, showing loading indicator.");
+                    showLoading(true,1);
+                } else {
+                    // If LIME has not been unveiled yet, we will show the loading indicator
+                    console.log("LIME not unveiled yet.");
+                }
+                showLimeBox(false);
                 computeOrGetLime(url);
             }
             
@@ -219,10 +249,18 @@
             recPlayer.style.display = "block";
 
             // Load emotion label
-            const emoLabel = document.getElementById("emoLabel");
+            // const emoLabel = document.getElementById("emoLabel");
+            // all elements with class "emoLabel"
+            const emoLabels = document.querySelectorAll(".emoLabel");
+
             let sliceLabel = "{{ slice_label }}";
-            emoLabel.textContent = sliceLabel.charAt(0).toUpperCase() + sliceLabel.slice(1);
-            emoLabel.className = emoLabel.className + ` emocolor-darker-${sliceLabel}`;
+            emoLabels.forEach(function(emoLabel) {
+                emoLabel.textContent = sliceLabel.charAt(0).toUpperCase() + sliceLabel.slice(1);
+                emoLabel.className = emoLabel.className + ` emocolor-darker-{{ slice_label }}`;
+            });
+            // let sliceLabel = "{{ slice_label }}";
+            // emoLabel.textContent = sliceLabel.charAt(0).toUpperCase() + sliceLabel.slice(1);
+            // emoLabel.className = emoLabel.className + ` emocolor-darker-${sliceLabel}`;
 
             // all .emotext elements
             document.querySelectorAll('.emotext').forEach(function(element) {
