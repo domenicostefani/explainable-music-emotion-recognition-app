@@ -329,7 +329,11 @@ def create_waveform_plot(time_data, waveform_data, emotionLabels=None, emotionPr
     sliceBoundaries = []
 
     # // xticks every sliceDuration/2, starting from sliceStart
-    x_ticks = np.arange(max(sliceStart, time_data[0]), time_data[-1]*1.1, sliceDuration/2.0)
+    if time_data[-1] > 10:
+        x_ticks = np.arange(max(sliceStart, time_data[0]), time_data[-1]*1.01, sliceDuration)
+    else:
+        x_ticks = np.arange(max(sliceStart, time_data[0]), time_data[-1]*1.01, sliceDuration/2.0)
+
     ax.set_xticks(x_ticks)
 
     # plt.tight_layout()
@@ -418,7 +422,7 @@ def create_waveform_plot(time_data, waveform_data, emotionLabels=None, emotionPr
     
     return plot_url, sliceBoundaries
 
-def plot_emotion_graph(emotionProbabilities, startstop, audioduration, figure_size=(12, 6), display=False, smooth=True):
+def plot_emotion_graph(emotionProbabilities, startstop, audioduration, figure_size=(9, 4), display=False, smooth=False):
     sample2Seconds = lambda x: x / CLASSIFIER_SR
     startstop_s = [(sample2Seconds(start), sample2Seconds(stop)) for start, stop in startstop]
 
@@ -481,11 +485,11 @@ def plot_emotion_graph(emotionProbabilities, startstop, audioduration, figure_si
             ax.plot(smooth_times, smooth_probs, 
                    label=emotion_capitalized, 
                    color=color, 
-                   linewidth=2, alpha=0.8)
+                   linewidth=2, alpha=1)
             
             # Plot the original data points
             ax.scatter(point_times, point_probs, 
-                      alpha=0.7, 
+                      alpha=1, 
                       color=color,
                       s=30, zorder=5)
         else:
@@ -501,11 +505,11 @@ def plot_emotion_graph(emotionProbabilities, startstop, audioduration, figure_si
                    linestyle='--', 
                    label=emotion_capitalized, 
                    color=color, 
-                   linewidth=1, alpha=0.8)
+                   linewidth=1, alpha=1)
             
             # Plot the original data points
             ax.scatter(point_times, point_probs, 
-                      alpha=0.5, 
+                      alpha=1, 
                       color=color)
 
     # Set x-axis ticks
@@ -516,6 +520,7 @@ def plot_emotion_graph(emotionProbabilities, startstop, audioduration, figure_si
     ax.set_xticks(xticks, [f"{t:.0f}" for t in xticks], rotation=0)
 
     # y ticks int(*100)%
+    ax.set_ylim(0, 1)  # Ensure y-axis covers full probability rang
     yticks = np.arange(ax.get_ylim()[0], ax.get_ylim()[1] + 0.1, 0.2)
     ax.set_yticks(yticks, [f"{int(t * 100)}%" for t in yticks])
 
@@ -694,7 +699,7 @@ import json
 slice_waveforms = {}  # Store precomputed slice data
 slice_computation_status = {"computing": False, "completed": False}
 
-def precompute_slice_waveforms(time_data, waveform_data, emotion_labels, filename_base, emotion_probabilities):
+def precompute_slice_waveforms(time_data, waveform_data, lores_waveform_data, emotion_labels, filename_base, emotion_probabilities):
     """Precompute all slice waveforms in a background thread"""
     global slice_waveforms, slice_computation_status
     
@@ -705,6 +710,7 @@ def precompute_slice_waveforms(time_data, waveform_data, emotion_labels, filenam
     try:
         slice_duration = 3  # seconds
         sample_rate = HIGHRES_SR  # Assuming 48kHz sample rate
+        lores_sample_rate = CLASSIFIER_SR  # Assuming 16kHz sample rate
         duration = time_data[-1] if len(time_data) > 0 else 0
         num_slices = int(math.floor(duration / slice_duration))
         
@@ -727,6 +733,12 @@ def precompute_slice_waveforms(time_data, waveform_data, emotion_labels, filenam
             # Extract slice data
             slice_time = time_data[start_sample:end_sample+1]
             slice_waveform = waveform_data[start_sample:end_sample+1]
+
+            lores_start_sample = int(slice_id * slice_duration * lores_sample_rate)
+            lores_end_sample = int(min((slice_id + 1) * slice_duration * lores_sample_rate, len(lores_waveform_data)))
+            
+            slice_waveform_lores = lores_waveform_data[lores_start_sample:lores_end_sample+1]
+            
             
             if len(slice_time) == 0:
                 continue
@@ -759,6 +771,7 @@ def precompute_slice_waveforms(time_data, waveform_data, emotion_labels, filenam
                 "spec_url": spec_url,
                 "time_data": slice_time.tolist(),
                 "waveform_data": slice_waveform.tolist(),
+                "waveform_data_lores": slice_waveform_lores.tolist(),
                 "duration": slice_time[-1] if len(slice_time) > 0 else 0,
                 "emotion_probabilities": slice_emotion_probabilities
             }
@@ -913,6 +926,7 @@ def compute_waveform():
         pred_segment_emotions = []
         for mel_rgb_batch in mel_segments:
             # Predict emotions using the classifier
+            print(">>> Calling classifier with batch of shape:", np.shape(mel_rgb_batch))
             pred_emotion_label, pred_probabilities = emotionClassifier.predict_segment(mel_rgb_batch)
             # print('shape of pred_emotion_label:', np.shape(pred_emotion_label))
             # print('shape of pred_probabilities:', np.shape(pred_probabilities))
@@ -976,7 +990,7 @@ def compute_waveform():
         filename_base = os.path.splitext(recFilename)[0]
         slice_thread = threading.Thread(
             target=precompute_slice_waveforms, 
-            args=(time_data, waveform_data, emotionLabels, filename_base,emotionProbabilities)
+            args=(time_data, waveform_data,lores_waveform_data, emotionLabels, filename_base,emotionProbabilities)
         )
         slice_thread.daemon = True
         slice_thread.start()
@@ -1071,6 +1085,58 @@ def clear_waveform():
     slice_computation_status = {"computing": False, "completed": False}
 
     return jsonify({"status": "ready"})
+
+lime_plot_overall = None
+lime_plot_highlight = None
+lime_plot_id = None
+
+
+@app.route('/explain_with_lime/<int:slice_id>')
+def run_lime(slice_id):
+    """Run LIME explanation for a specific slice"""
+    global slice_waveforms, lime_plot_id, lime_plot_overall, lime_plot_highlight, emotionClassifier
+    lime_plot_id = slice_id  # Store the current slice ID for LIME explanation
+
+    print(f"Running LIME explanation for slice {slice_id}")
+    
+    if slice_id not in slice_waveforms:
+        return jsonify({"error": "Slice data not available"}), 404
+    
+    # Get the slice waveform data
+    slice_data = slice_waveforms[slice_id]
+    time_data = np.array(slice_data["time_data"])
+    waveform_data_lores = np.array(slice_data["waveform_data_lores"])  # Use low-res waveform data for LIME
+    
+    # Run LIME explanation (assuming you have a function for this)
+    heatmap_dict = emotions.run_lime_explanation(time_data, waveform_data_lores, emotionClassifier)
+
+    lime_plot_overall = heatmap_dict.get('heatmap_overall', None)
+    lime_plot_highlight = heatmap_dict.get('heatmap_highlight', None)
+
+    response_dict = {
+        "status": "ready",
+        "heatmap_overall": lime_plot_overall,
+        "heatmap_highlight": lime_plot_highlight
+    }
+    
+    return jsonify(response_dict)
+
+@app.route('/get_lime_plot/<int:slice_id>')
+def get_lime_plot(slice_id):
+    """Get LIME plot for a specific slice"""
+    global lime_plot_overall, lime_plot_highlight, lime_plot_id
+
+    if slice_id != lime_plot_id:
+        # return jsonify({"error": "LIME plot not available for this slice"}), 404
+        # plot not available for this slice, run LIME first
+        return run_lime(slice_id)
+    
+    return jsonify({
+        "status": "ready",
+        "heatmap_overall": lime_plot_overall,
+        "highlight_plot": lime_plot_highlight
+    })
+
 
 if __name__ == '__main__':
     # Create templates before running the app

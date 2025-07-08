@@ -81,9 +81,121 @@
                 <img src="data:image/png;base64,{{ spectrogram }}" alt="Spectrogram Slice {{ slice_label }}">
             </div>
         </div>
+
+        <div class="message-box rev-box">
+            <p>What did the neural network found in the spectrogram that was so telling?</p>
+            <p>We can run an <b>AI Explainability method</b> to understand which area of the <b>spectrogram</b> was found to be so <b class="emotext"></b></p>
+
+            <p>We can try with <a href="https://homes.cs.washington.edu/~marcotcr/blog/lime/">LIME</a> (Local Interpretable Model-Agnostic Explanations)</p>
+
+            <div style="width: 100%;">
+                <button class="margincentered" onclick="unveilLIME();">Go with LIME 🍋‍🟩</button>
+            </div>
+        </div>
+
+        <div id="limebox">
+            <div class="slice-img-full">
+                <p>This spectrogram has been analyzed by LIME</p>
+                <p>The darker red area of the spectrogram is the area that, according to the classifier, most represent the emption <b>Relaxed</b> in this slice.</p>
+                <img src="" id="limespec" alt="LIME Spectrogram for Slice {{ slice_label }}">
+            </div>
+            <div class="slice-img-full">
+                <p>This is the most relevant region</p>
+                <img src="" id="limespecDetail" alt="LIME detailed Spectrogram for Slice {{ slice_label }}">
+                <p>Listen to the region here!</p>
+                <audio id="limePlayer" controls class="rec-player">
+                    <source id="limeSource" src="{{ audio_url }}#t={{ slice_start }},{{ slice_end }}" type="audio/wav">
+                    Your browser does not support the audio element.
+                </audio>
+            </div>
+        </div>
     </div>
 
     <script>
+
+        function computeOrGetLime (url){
+            fetch(url, {
+                method: 'GET',
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                console.log("LIME explanation request sent successfully.");
+                return response.json();
+            })
+            .then(data => {
+                console.log("LIME explanation data received:", data);
+                // Redirect to the LIME explanation page
+                // window.location.href = `/lime_explanation/${sliceId}`;
+
+                // get id limespec
+                const limeSpec = document.getElementById("limespec");
+                // set the src of limespec to the base64 image data
+                limeSpec.src = `data:image/png;base64,${data.heatmap_overall}`;
+
+                const limespecDetail = document.getElementById("limespecDetail");
+                // set the src of limespecDetail to the base64 image data
+                limespecDetail.src = `data:image/png;base64,${data.highlight_plot}`;
+            })
+        }
+
+        function unveilLIME() {
+
+            sessionStorage.setItem("lime_unveiled", "true");
+
+            // Show the LIME box
+            const limeBox = document.getElementById("limebox");
+            limeBox.style.display = "block";
+            // Show rec-player (elements of class="rec-player")
+            players = document.querySelectorAll(".rec-player");
+            players.forEach(player => {
+                player.style.display = "block";
+            });
+        }
+
+        window.addEventListener('load', function() {
+            // loadExistingWaveform();
+            const limeUnveiled = sessionStorage.getItem("lime_unveiled");
+            console.log("LIME unveiled status:", limeUnveiled);
+            const limeComputed = sessionStorage.getItem("lime_computed");
+            console.log("LIME computed status:", limeComputed);
+
+            if (limeComputed === "true") {
+                // LIME has already been computed, so we can just unveil it
+                console.log("LIME already computed");
+                if (limeUnveiled === "true") {
+                    // Unveil the LIME spectrogram
+                    console.log("Unveiling LIME...");
+                    unveilLIME();
+                } else {
+                    // Hide the LIME box
+                    console.log("Hiding LIME box, not unveiled yet.");
+                    const limeBox = document.getElementById("limebox");
+                    limeBox.style.display = "none";
+                }
+            } else {
+                // LIME has not been computed yet, so we will compute it now
+                console.log("LIME not computed yet, computing...");
+                const sliceId = "{{ slice_id }}";
+                const url = `/get_lime_plot/${sliceId}`;
+
+                computeOrGetLime(url);
+            }
+            
+            if (limeUnveiled === "true") {
+                
+                // Unveil the LIME spectrogram
+                console.log("Unveiling LIME...");
+                unveilLIME();
+            } 
+            // else {
+            //     // Hide the LIME box
+            //     const limeBox = document.getElementById("limebox");
+            //     limeBox.style.display = "none";
+            // }
+        });
+
         document.addEventListener("DOMContentLoaded", function() {
             const recPlayer = document.getElementById("recPlayer");
             const recSource = document.getElementById("recSource");
@@ -98,6 +210,12 @@
             let sliceLabel = "{{ slice_label }}";
             emoLabel.textContent = sliceLabel.charAt(0).toUpperCase() + sliceLabel.slice(1);
             emoLabel.className = emoLabel.className + ` emocolor-darker-${sliceLabel}`;
+
+            // all .emotext elements
+            document.querySelectorAll('.emotext').forEach(function(element) {
+                element.textContent = sliceLabel.charAt(0).toUpperCase() + sliceLabel.slice(1);
+                element.className = element.className + ` emocolor-${sliceLabel}`;
+            });
 
 
             let sliceEmoProbabilities = "{{ emotion_probabilities }}";
@@ -156,6 +274,7 @@
                 counter++;
             }
         });
+    
     </script>
 </body>
 </html>

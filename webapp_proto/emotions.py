@@ -1,4 +1,6 @@
 import os, random
+import io, base64 # For base64 encoding of images
+
 
 EMOTIONS = ["aggressive", "happy", "relaxed", "sad"]
 EMOTIONS_TO_INDEX = {emotion: index for index, emotion in enumerate(EMOTIONS)}
@@ -163,3 +165,161 @@ class EmotionClassifier:
         predicted_emotion = max(final_prediction, key=final_prediction.get)
 
         return predicted_emotion, final_prediction
+    
+
+    def getPredictFunction(self):
+        """Returns directly the predict function of the model"""
+        def predict_function(mel_segment):
+            """Predicts the emotion for a batch of mel segments"""
+            predictions = self.model.predict(mel_segment)
+            return predictions
+        return predict_function
+    
+
+from lime import lime_image
+
+def get_heatmap(explanation_, instance_, fig_path_, segment_duration_s=3, mask=None, display= False):
+
+    # m. select the class with highest score
+    class_index = explanation_.top_labels[0]    
+    # map each explanation weight to the corresponding superpixel
+    dict_heatmap = dict(explanation_.local_exp[class_index])
+
+    print('heatmap: '+'\n'.join([str(e) for e in dict_heatmap.items()]))
+
+    heatmap = np.vectorize(dict_heatmap.get)(explanation_.segments)    
+
+    print('shape of heatmap:', heatmap.shape)
+
+    
+    plt.figure(figsize=(8, 6)) 
+    image_background = instance_[:,:,0]
+    # plot. use symmetrical colorbar that makes more sense
+    if mask is None:
+        plt.imshow(image_background, aspect='auto', origin='lower', cmap='gray', alpha=1)    
+        plt.imshow(heatmap, aspect='auto', cmap='RdBu_r', vmin=-heatmap.max(), vmax=heatmap.max(),  origin='lower', alpha=0.8)
+        plt.colorbar()
+    else:
+        plt.imshow(image_background, aspect='auto', origin='lower', cmap='gray', alpha=0.3) 
+        plt.imshow(mask, aspect='auto', origin='lower', cmap='Blues', alpha=0.9) 
+
+    # plt.imshow(heatmap, aspect='auto', cmap='RdBu', vmin=-heatmap.max(), vmax=heatmap.max(), alpha=0.8) #origin='lower' to have (0, 0) left bottom
+    
+    # print('xlim:', plt.xlim())
+    ofst = 0.5
+    plt.xlim(-ofst, heatmap.shape[1]-ofst)  # set xlim to match the spectrogram width
+    plt.ylim(-ofst, heatmap.shape[0]-ofst)  # set ylim to match
+
+    # xticks = np.arange(0, heatmap.shape[1]-0.5, segment_duration_s * 10)  # every segment_duration_s seconds
+    interval = heatmap.shape[1]/segment_duration_s/2
+    xticks = np.arange(-ofst, heatmap.shape[1]-ofst+interval, interval)  # every segment_duration_s seconds
+    
+    x_to_time = lambda x: x/heatmap.shape[1] * segment_duration_s  # convert index to time in seconds
+    plt.xticks(xticks, ['%.2f'%(x_to_time(t+ofst)) for t in xticks], rotation=0)
+    # plt.xticks(xticks, ['%.1f'%t for t in xticks], rotation=0)
+
+    plt.title('Spectrogram')
+    plt.xlabel('Time (s)')
+    plt.ylabel('Frequency')
+    if fig_path_ != False: plt.savefig(fig_path_)
+    if display:
+        plt.show()
+
+    # Convert plot to base64 string
+    img = io.BytesIO()
+    plt.savefig(img, format='png', dpi=100, bbox_inches='tight')
+    img.seek(0)
+    heatmap_url = base64.b64encode(img.getvalue()).decode()
+    plt.close()
+    
+    return heatmap_url, heatmap
+
+
+def run_lime_explanation(time_data, waveform_data, emotionClassifier):
+    mel_segment = get_input_sample(waveform_data)
+
+    # list_mel_segments: list of samples
+
+    top_labels = len(EMOTIONS)
+
+    # see the prediction
+    print(">>> LIME calls classifier with batch of shape:", np.shape(mel_segment))
+    prediction = emotionClassifier.predict_segment(mel_segment)
+    print(f'prediction', prediction)
+
+    # # get explanation
+    explainer = lime_image.LimeImageExplainer()
+    instance = mel_segment[0]  # to avoid batch dimension (128, 130, 3)
+    explanation = explainer.explain_instance(instance, emotionClassifier.getPredictFunction(), top_labels=top_labels, hide_color=0,
+                                            num_samples=20, segmentation_fn=segmentation_meaningful_regions)
+    # print('pred:', explanation.top_labels[0], 'true:', LABEL) # prediction
+
+    # # get and plot heatmap
+    LIME_heatmap_url, LIME_heatmap = get_heatmap(explanation, instance, fig_path_=False)
+    # explanation.local_exp[explanation.top_labels[0]]
+
+
+
+    # ---------------------- #
+    #  For detailed heatmap  #
+    # ---------------------- #
+
+    def get_positive_heatmap(image, normalize=True):
+        positive_image = image.copy()
+        positive_image [ positive_image < 0 ] = 0
+        if normalize:
+            positive_image = (positive_image - positive_image.min()) / (positive_image.max() - positive_image.min())        
+        return positive_image
+
+
+    # get a dictionary to map each segment ID with the corresponding value
+    def get_value_for_each_segment(seg_map, image):
+        # get segmentation indeces
+        unique_segments = np.unique(seg_map)
+        
+        dict_segment_values = {}    
+        for segment in unique_segments:    
+            mask = seg_map == segment  # create a mask for that segment ID
+            pixel_values = image[mask]  # take all the pixel values in the region
+            unique_pixel_val = np.unique(pixel_values)  # all pixels are the same so une unique
+            dict_segment_values[segment] = unique_pixel_val[0]   
+        return dict_segment_values
+
+
+
+    # get segmentation map
+    segmentation_map = segmentation_meaningful_regions(LIME_heatmap)
+
+    # make LIME and SHAP heatmaps positive and normalized
+    LIME_heatmap_pos = get_positive_heatmap(LIME_heatmap)
+    #SHAP_heatmap_pos = get_positive_heatmap(SHAP_heatmap)
+    #GRAD_heatmap_pos = get_positive_heatmap(GradCAM_heatmap_avg)
+
+    dict_segment_val = get_value_for_each_segment(segmentation_map, LIME_heatmap_pos)
+
+    #best_segments = sorted(dict_segment_val, key=dict_segment_val.get, reverse=True)
+    best_regions = sorted(dict_segment_val, key=dict_segment_val.get, reverse=True)
+
+    # ----------------------------------
+    #plot best N regions
+    N=1
+    epsilon = 0.0001  # to avoid buchetti
+    image = instance.copy() + epsilon
+    # image_height, image_width = image.shape[:2]
+
+    # make a mask for the best segments
+    mask = np.isin(segmentation_map, best_regions[0:N])
+    # make image of relevat parts
+    highlighted_image = np.zeros_like(image) 
+    highlighted_image[mask] = image[mask] 
+
+
+    mask_rel = highlighted_image[:, :, 0] != 0
+    detailed_Heatmap_url, _ = get_heatmap(explanation, instance, fig_path_=False, mask=np.ma.masked_where(~mask_rel, highlighted_image[:, :, 0]))
+
+    res = {
+        "heatmap_overall": LIME_heatmap_url,
+        "heatmap_highlight": detailed_Heatmap_url,
+    }
+
+    return res
