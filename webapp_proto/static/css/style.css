@@ -28,6 +28,40 @@
     font-style: normal;
 }
 
+:root 
+{
+    /* Light mode colors  */
+    --bg-color: #f5f5f5;
+    --bg-container-color: #ffffff;
+    --text-color: #333333;
+    --header-bg: #f8f9fa;
+    --card-bg: #ffffff;
+    --border-color: #e0e0e0;
+    --button-bg: #007bff;
+    --button-text: #ffffff;
+    --input-bg: #ffffff;
+    --input-border: #ced4da;
+    --link-color: #007bff;
+    --shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+[data-theme="dark"] 
+{
+    /* Dark mode colors */
+    --bg-color: #1a1a1a;
+    --bg-container-color: #373737;
+    --text-color: #e0e0e0;
+    --header-bg: #2d2d2d;
+    --card-bg: #2d2d2d;
+    --border-color: #404040;
+    --button-bg: #0d6efd;
+    --button-text: #ffffff;
+    --input-bg: #2d2d2d;
+    --input-border: #404040;
+    --link-color: #66b3ff;
+    --shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
+
 * {
     /* font-family: Arial, sans-serif; */
     font-family: 'Monserrat', sans-serif;
@@ -52,11 +86,19 @@ body {
     /* max-width: 1200px; */
     margin: 0 auto;
     padding: 20px;
-    background-color: #f5f5f5;
+    background-color: var(--bg-color); /*#f5f5f5;*/
+    color: var(--text-color);
 }
+
+a {
+    color: var(--link-color);
+    /* text-decoration: none; */
+}
+
 .container {
-    background-color: white;
-    padding: 30px;
+    background-color: var(--bg-container-color);
+    /* padding: 30px; */
+    padding: 0  2rem;
     border-radius: 10px;
     box-shadow: 0 2px 10px rgba(0,0,0,0.1);
 
@@ -76,7 +118,6 @@ body {
     padding: 10px 20px;
     border-radius: 5px;
     cursor: pointer;
-    margin-bottom: 20px;
     text-decoration: none;
     display: inline-block;
 }
@@ -89,7 +130,7 @@ body {
     border-radius: 5px;
 }
 .slice-info {
-    background-color: #e9ecef;
+    background-color: var(--bg-color);
     padding: 15px;
     border-radius: 5px;
     margin-bottom: 20px;
@@ -329,7 +370,7 @@ button:hover {
 }
 .rec-filename-display-box {
     padding:.5rem;
-    background-color: #dcdcdc;
+    background-color: var(--bg-color);
     border-radius:.2rem;
     max-width: 30rem;
     margin: 0 auto;
@@ -361,9 +402,10 @@ button:hover {
     display: flex;
     flex-direction: column;
     align-items: center;
-    background-color: white;
-    margin: .3rem;
+    background-color: var(--bg-color);
+    margin: .3rem auto;
     border-radius: 10px;
+    max-width: 30rem;
 }
 
 #overallEmotionText {
@@ -522,7 +564,8 @@ b {
     text-align: center;
     margin-top: 20px;
     font-size: 14px;
-    color: #666;
+    /* color: #666; */
+
 }
 
 p {
@@ -531,4 +574,43 @@ p {
 
 #limebox {
     display: none;
+}
+
+
+
+.header {
+    /* background-color: var(--header-bg); */
+    padding: 1rem 2rem;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    /* justify-content: flex-end; */
+    align-items: right;
+    transition: background-color 0.3s ease;
+}
+
+
+.dark-mode-toggle {
+    background-color: var(--button-bg);
+    color: var(--button-text);
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.dark-mode-toggle:hover {
+    opacity: 0.8;
+    transform: translateY(-1px);
+}
+
+.logo {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: var(--text-color);
 }

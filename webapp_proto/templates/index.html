@@ -27,8 +27,16 @@
     </style>
 </head>
 <body>
+    <header class="header">
+        <div class="logo">Explainable Music Emotion Recognition</div>
+        <button class="dark-mode-toggle" onclick="toggleDarkMode()">
+            <span id="theme-icon">🌙</span>
+            <span id="theme-text">Dark Mode</span>
+        </button>
+    </header>
+
     <div class="container", style="text-align: center;">
-        <h1>Explainable Music Emotion Recognition</h1>
+        <!-- <h1>Explainable Music Emotion Recognition</h1> -->
         
         <p id="initialInfobox" {% if show_waveform %}style="display: none;"{% endif %}>
             {% if recording_supported %}
@@ -223,6 +231,8 @@
     <div class="footer">
         Made by <a href="https://github.com/michelerossi1" target="_blank">Michele Rossi</a> and <a href="https://domenicostefani.com/" target="_blank">Domenico Stefani</a> @ CIMIL, University of Trento, Italy.
     </div>
+
+    <script src="{{ url_for('static', filename='js/darkmode.js') }}"></script>
 
     <script>
         // Animation control variables

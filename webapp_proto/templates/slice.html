@@ -9,8 +9,15 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
-    <div class="container">
+    <header class="header">
+        <!-- <div class="logo">My Website</div> -->
         <a href="/" class="back-btn">&larr; Back</a>
+        <button class="dark-mode-toggle" onclick="toggleDarkMode()">
+            <span id="theme-icon">🌙</span>
+            <span id="theme-text">Dark Mode</span>
+        </button>
+    </header>
+    <div class="container">
         
         <div class="slice-info">
             <div class="slice-title">
@@ -110,6 +117,9 @@
             </div>
         </div>
     </div>
+
+    <script src="{{ url_for('static', filename='js/darkmode.js') }}"></script>
+
 
     <script>
 
