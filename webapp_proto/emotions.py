@@ -251,7 +251,7 @@ def run_lime_explanation(time_data, waveform_data, emotionClassifier):
     explainer = lime_image.LimeImageExplainer()
     instance = mel_segment[0]  # to avoid batch dimension (128, 130, 3)
     explanation = explainer.explain_instance(instance, emotionClassifier.getPredictFunction(), top_labels=top_labels, hide_color=0,
-                                            num_samples=20, segmentation_fn=segmentation_meaningful_regions)
+                                            num_samples=2000, segmentation_fn=segmentation_meaningful_regions)
     # print('pred:', explanation.top_labels[0], 'true:', LABEL) # prediction
 
     # # get and plot heatmap

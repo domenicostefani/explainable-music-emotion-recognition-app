@@ -10,8 +10,11 @@
 </head>
 <body>
     <header class="header">
-        <!-- <div class="logo">My Website</div> -->
         <a href="/" class="back-btn">&larr; Back</a>
+        <div class="slice-logo">
+            <div class="logo">Slice #{{ slice_id }}</div>
+            <span>({{ slice_start }} - {{ slice_end }} seconds)</span>
+        </div>
         <button class="dark-mode-toggle" onclick="toggleDarkMode()">
             <span id="theme-icon">🌙</span>
             <span id="theme-text">Dark Mode</span>
@@ -20,10 +23,10 @@
     <div class="container">
         
         <div class="slice-info">
-            <div class="slice-title">
+            <!-- <div class="slice-title">
                 <h1>Slice #{{ slice_id }}</h1>
                 <span>({{ slice_start }} - {{ slice_end }} seconds)</span>
-            </div>
+            </div> -->
             <h3>This slice was classified: <span id="emoLabel" style="font-weight: bold;"></span></h3>
         </div>
             

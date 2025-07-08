@@ -43,6 +43,11 @@
     --input-border: #ced4da;
     --link-color: #007bff;
     --shadow: 0 2px 4px rgba(0,0,0,0.1);
+
+    --emotion-aggressive-color: #ac2f2f;
+    --emotion-happy-color: #c9b241;
+    --emotion-relaxed-color: #6ea971;
+    --emotion-sad-color: #4f93a8;
 }
 
 [data-theme="dark"] 
@@ -60,6 +65,11 @@
     --input-border: #404040;
     --link-color: #66b3ff;
     --shadow: 0 2px 4px rgba(0,0,0,0.3);
+    /* vars for emotion colors */
+    --emotion-aggressive-color: #ff9393;
+    --emotion-happy-color: #e8cf2e;
+    --emotion-relaxed-color: #96CEB4;
+    --emotion-sad-color: #45B7D1;
 }
 
 * {
@@ -72,16 +82,6 @@
 
 body {
 
-    /* vars for emotion colors */
-    --emotion-aggressive-color: #FF6B6B;
-    --emotion-happy-color: #e8cf2e;
-    --emotion-relaxed-color: #96CEB4;
-    --emotion-sad-color: #45B7D1;
-
-    --emotion-darker-aggressive-color: #ac2f2f;
-    --emotion-darker-happy-color: #c9b241;
-    --emotion-darker-relaxed-color: #6ea971;
-    --emotion-darker-sad-color: #4f93a8;
 
     /* max-width: 1200px; */
     margin: 0 auto;
@@ -98,7 +98,7 @@ a {
 .container {
     background-color: var(--bg-container-color);
     /* padding: 30px; */
-    padding: 0  2rem;
+    padding: 1rem  2rem;
     border-radius: 10px;
     box-shadow: 0 2px 10px rgba(0,0,0,0.1);
 
@@ -131,11 +131,13 @@ a {
 }
 .slice-info {
     background-color: var(--bg-color);
-    padding: 15px;
+    padding: .3rem 0;
     border-radius: 5px;
-    margin-bottom: 20px;
+    margin: 1rem;
 
     text-align: center;
+    max-width: 30rem;
+    margin: 0 auto;
 }
 .slice-container {
     display: flex;
@@ -234,7 +236,7 @@ button:hover {
     transition: width 0.3s;
 }
 .waveform-container {
-    margin-top: 20px;
+    /* margin-top: 20px; */
     {% if not show_waveform %}display: none;{% endif %}
 }
 .waveform-img {
@@ -374,6 +376,8 @@ button:hover {
     border-radius:.2rem;
     max-width: 30rem;
     margin: 0 auto;
+    display: flex;
+    justify-content: space-between;
 }
 
 @media screen and (max-width: 768px) {
@@ -548,16 +552,16 @@ b {
 }
 
 .emocolor-darker-aggressive {
-    color: var(--emotion-darker-aggressive-color);
+    color: var(--emotion-aggressive-color);
 }
 .emocolor-darker-relaxed {
-    color: var(--emotion-darker-relaxed-color);
+    color: var(--emotion-relaxed-color);
 }
 .emocolor-darker-happy {
-    color: var(--emotion-darker-happy-color);
+    color: var(--emotion-happy-color);
 }
 .emocolor-darker-sad {
-    color: var(--emotion-darker-sad-color);
+    color: var(--emotion-sad-color);
 }
 
 .footer {
@@ -587,6 +591,8 @@ p {
     /* justify-content: flex-end; */
     align-items: right;
     transition: background-color 0.3s ease;
+    max-width: 70rem;
+    margin: 0 auto;
 }
 
 
@@ -613,4 +619,11 @@ p {
     font-size: 1.5rem;
     font-weight: bold;
     color: var(--text-color);
+}
+
+.slice-logo {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 1.5rem;
 }
