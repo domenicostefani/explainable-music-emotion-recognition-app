@@ -94,7 +94,7 @@
 
         <div class="message-box rev-box">
             <p>What did the neural network found in the spectrogram that was so telling?</p>
-            <p>We can run an <b>AI Explainability method</b> to understand which area of the <b>spectrogram</b> was found to be so <b class="emotext"></b></p>
+            <p>We can run an <b>AI Explainability method</b> to understand which area of the <b>spectrogram</b> was found to be so <b id="emotext"></b></p>
 
             <p>We can try with <a href="https://homes.cs.washington.edu/~marcotcr/blog/lime/">LIME</a> (Local Interpretable Model-Agnostic Explanations)</p>
 
@@ -256,17 +256,15 @@
             let sliceLabel = "{{ slice_label }}";
             emoLabels.forEach(function(emoLabel) {
                 emoLabel.textContent = sliceLabel.charAt(0).toUpperCase() + sliceLabel.slice(1);
-                emoLabel.className = emoLabel.className + ` emocolor-darker-{{ slice_label }}`;
+                emoLabel.className = ` emocolor-darker-{{ slice_label }}`;
             });
-            // let sliceLabel = "{{ slice_label }}";
-            // emoLabel.textContent = sliceLabel.charAt(0).toUpperCase() + sliceLabel.slice(1);
-            // emoLabel.className = emoLabel.className + ` emocolor-darker-${sliceLabel}`;
 
-            // all .emotext elements
-            document.querySelectorAll('.emotext').forEach(function(element) {
-                element.textContent = sliceLabel.charAt(0).toUpperCase() + sliceLabel.slice(1);
-                element.className = element.className + ` emocolor-${sliceLabel}`;
-            });
+            // element with id emotext
+            const emotext = document.getElementById("emotext");
+            if (emotext) {
+                emotext.textContent = sliceLabel.charAt(0).toUpperCase() + sliceLabel.slice(1);
+                emotext.className = ` emocolor-${sliceLabel}`;
+            }
 
 
             let sliceEmoProbabilities = "{{ emotion_probabilities }}";

@@ -882,7 +882,7 @@
 
             overallEmotionPrint = data.overall_emotion.charAt(0).toUpperCase() + data.overall_emotion.slice(1);
             overallEmotionText.textContent = `${overallEmotionPrint || 'Unknown'}`;
-            overallEmotionText.className = overallEmotionText.className + ` emocolor-darker-${data.overall_emotion.toLowerCase() || 'unknown'}`;
+            overallEmotionText.className =  `emocolor-darker-${data.overall_emotion.toLowerCase() || 'unknown'}`;
             // console.log('Overall Emotion Text set to :', overallEmotionText.textContent);
             counter = 0;
             for (const [emotion, prob] of Object.entries(data.overall_probabilities || {})) {
