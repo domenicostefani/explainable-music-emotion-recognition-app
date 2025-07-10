@@ -881,6 +881,162 @@ def upload_audio():
         })
     else:
         return jsonify({"status": "error", "message": "Invalid file type"}), 400
+    
+from scipy import signal
+def find_performance_boundaries(audio_samples, SAMPLERATE, 
+                              window_size_ms=100, 
+                              min_performance_duration_ms=1000,
+                              energy_percentile_threshold=15):
+    """
+    Find the start and end indices of audio performance in a signal.
+    
+    This function works by:
+    1. Computing short-term energy using a sliding window
+    2. Dynamically determining noise floor and signal threshold
+    3. Finding sustained regions above threshold
+    4. Returning the boundaries of the longest sustained region
+    
+    Parameters:
+    -----------
+    audio_samples : numpy.ndarray
+        Array of audio samples
+    SAMPLERATE : int
+        Sample rate of the audio
+    window_size_ms : int, default=100
+        Size of analysis window in milliseconds
+    min_performance_duration_ms : int, default=1000
+        Minimum duration for a valid performance segment in milliseconds
+    energy_percentile_threshold : float, default=15
+        Percentile threshold for distinguishing signal from noise
+    
+    Returns:
+    --------
+    tuple: (start_index, end_index)
+        Start and end sample indices of the performance
+    """
+    
+    # Convert to mono if stereo
+    if len(audio_samples.shape) > 1:
+        audio_samples = np.mean(audio_samples, axis=1)
+    
+    # Calculate window size in samples
+    window_size = int(window_size_ms * SAMPLERATE / 1000)
+    min_performance_samples = int(min_performance_duration_ms * SAMPLERATE / 1000)
+    
+    # Compute short-term energy using RMS in overlapping windows
+    hop_size = window_size // 4  # 75% overlap
+    n_windows = (len(audio_samples) - window_size) // hop_size + 1
+    
+    energy = np.zeros(n_windows)
+    
+    for i in range(n_windows):
+        start_idx = i * hop_size
+        end_idx = start_idx + window_size
+        window_samples = audio_samples[start_idx:end_idx]
+        
+        # RMS energy with small epsilon to avoid log(0)
+        rms = np.sqrt(np.mean(window_samples**2))
+        energy[i] = 20 * np.log10(rms + 1e-10)  # Convert to dB
+    
+    # Apply smoothing to reduce noise in energy signal
+    energy = signal.medfilt(energy, kernel_size=min(5, len(energy)))
+    
+    # Dynamic threshold calculation
+    # Use percentile-based approach to handle different signal levels
+    noise_floor = np.percentile(energy, 10)  # Bottom 10% assumed to be noise
+    signal_ceiling = np.percentile(energy, 90)  # Top 10% assumed to be signal
+    
+    # Adaptive threshold based on the range between noise floor and signal
+    dynamic_range = signal_ceiling - noise_floor
+    
+    if dynamic_range < 6:  # Very quiet signal overall
+        threshold = noise_floor + dynamic_range * 0.3
+    elif dynamic_range > 30:  # Very loud signal with quiet background
+        threshold = noise_floor + dynamic_range * 0.2
+    else:  # Normal dynamic range
+        threshold = noise_floor + dynamic_range * 0.25
+    
+    # Alternative threshold using percentile directly
+    percentile_threshold = np.percentile(energy, energy_percentile_threshold)
+    
+    # Use the higher of the two thresholds for robustness
+    final_threshold = max(threshold, percentile_threshold)
+    
+    # Find regions above threshold
+    above_threshold = energy > final_threshold
+    
+    # Find start and end of continuous regions
+    transitions = np.diff(above_threshold.astype(int))
+    starts = np.where(transitions == 1)[0] + 1
+    ends = np.where(transitions == -1)[0] + 1
+    
+    # Handle edge cases
+    if above_threshold[0]:
+        starts = np.insert(starts, 0, 0)
+    if above_threshold[-1]:
+        ends = np.append(ends, len(above_threshold))
+    
+    # Find the longest continuous region above threshold
+    if len(starts) == 0 or len(ends) == 0:
+        # No significant signal found, return full range
+        return 0, len(audio_samples) - 1
+    
+    # Calculate duration of each region
+    region_lengths = ends - starts
+    
+    # Filter regions by minimum duration
+    valid_regions = region_lengths * hop_size >= min_performance_samples
+    
+    if not np.any(valid_regions):
+        # No regions meet minimum duration, return the longest one
+        longest_idx = np.argmax(region_lengths)
+        start_window = starts[longest_idx]
+        end_window = ends[longest_idx]
+    else:
+        # Find the longest valid region
+        valid_starts = starts[valid_regions]
+        valid_ends = ends[valid_regions]
+        valid_lengths = valid_ends - valid_starts
+        longest_idx = np.argmax(valid_lengths)
+        start_window = valid_starts[longest_idx]
+        end_window = valid_ends[longest_idx]
+    
+    # Convert window indices back to sample indices
+    start_sample = start_window * hop_size
+    end_sample = min(end_window * hop_size + window_size, len(audio_samples))
+    
+    # Fine-tune boundaries by looking for more precise start/end points
+    # Look backwards from start to find actual beginning
+    search_start = max(0, start_sample - window_size)
+    start_segment = audio_samples[search_start:start_sample + window_size]
+    
+    if len(start_segment) > 0:
+        # Find the first point where signal starts rising consistently
+        local_energy = np.convolve(start_segment**2, np.ones(SAMPLERATE//20), mode='same')
+        local_threshold = np.percentile(local_energy, 20)
+        
+        rising_points = np.where(local_energy > local_threshold)[0]
+        if len(rising_points) > 0:
+            refined_start = search_start + rising_points[0]
+            start_sample = max(0, refined_start)
+    
+    # Look forward from end to find actual ending
+    search_end = min(len(audio_samples), end_sample + window_size)
+    end_segment = audio_samples[end_sample - window_size:search_end]
+    
+    if len(end_segment) > 0:
+        # Find the last point where signal is still significant
+        local_energy = np.convolve(end_segment**2, np.ones(SAMPLERATE//20), mode='same')
+        local_threshold = np.percentile(local_energy, 20)
+        
+        falling_points = np.where(local_energy > local_threshold)[0]
+        if len(falling_points) > 0:
+            refined_end = end_sample - window_size + falling_points[-1]
+            end_sample = min(len(audio_samples) - 1, refined_end)
+    
+    return int(start_sample), int(end_sample)
+
+
 
 # Modify the compute_waveform function
 @app.route('/compute_waveform')
@@ -901,6 +1057,11 @@ def compute_waveform():
 
         print(f"Reading WAV file: {recFilename}")
         waveform_data, sr = read_wav_file(recFilename, sample_rate=HIGHRES_SR) if recFilename else ([], [])
+        # find_performance_boundaries
+        start_idx, end_idx = find_performance_boundaries(waveform_data, HIGHRES_SR, energy_percentile_threshold=15)
+        print(f"Performance boundaries found: start={start_idx} ({start_idx/HIGHRES_SR:.1f}s), end={end_idx} ({end_idx/HIGHRES_SR:.1f}s)")
+        waveform_data = waveform_data[start_idx:end_idx]
+
         assert waveform_data is not None, "Waveform data must not be None"
         assert len(waveform_data) > 0, "Waveform data must not be empty"
         duration = len(waveform_data) / sr
@@ -918,6 +1079,11 @@ def compute_waveform():
         lores_waveform_data, _ = read_wav_file(recFilename, CLASSIFIER_SR) if recFilename else ([], [])
         assert lores_waveform_data is not None, "Low-resolution waveform data must not be None"
         assert len(lores_waveform_data) > 0, "Low-resolution waveform data must not be empty"
+
+        # Clip with start stop performance boundaries
+        lores_start_idx = int(start_idx * CLASSIFIER_SR / HIGHRES_SR)
+        lores_end_idx = int(end_idx * CLASSIFIER_SR / HIGHRES_SR)
+        lores_waveform_data = lores_waveform_data[lores_start_idx:lores_end_idx]
 
         mel_segments, audio_segments, segment_startstop_smp = emotions.split_song(lores_waveform_data,
                                                               sampling_rate=CLASSIFIER_SR,

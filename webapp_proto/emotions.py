@@ -105,6 +105,39 @@ def get_input_sample(segment_, sampling_rate=22050, n_fft=2048, hop_length=512, 
     mel_rgb = np.repeat(mel_db_norm[..., np.newaxis], 3, axis=-1)  # added 3 channels
     return np.expand_dims(mel_rgb, axis=0)
 
+
+def mel_bin_to_hz(mel_bin, n_mels, sample_rate=22050, n_fft=2048, fmin=0.0, fmax=None):
+    """
+    Convert mel bin indices back to Hz frequencies.
+    
+    Args:
+        mel_bin: Mel bin index(es) - can be single value or array
+        n_mels: Number of mel bins in the mel spectrogram
+        sample_rate: Sample rate of the audio (default: 22050)
+        n_fft: FFT size used for spectrogram (default: 2048)
+        fmin: Minimum frequency (default: 0.0)
+        fmax: Maximum frequency (default: sample_rate/2)
+        
+    Returns:
+        Frequency in Hz corresponding to the mel bin(s)
+    """
+    if fmax is None:
+        fmax = sample_rate / 2.0
+    
+    # Convert frequency limits to mel scale
+    mel_min = librosa.hz_to_mel(fmin)
+    mel_max = librosa.hz_to_mel(fmax)
+    
+    # Create mel scale points
+    mel_points = np.linspace(mel_min, mel_max, n_mels + 2)
+    
+    # Convert mel bin index to mel value
+    mel_bin = np.asarray(mel_bin)
+    mel_values = mel_points[mel_bin + 1]  # +1 because mel_points includes boundaries
+    
+    # Convert mel values back to Hz
+    return librosa.mel_to_hz(mel_values)
+
 def split_song(audiosignal, segment_duration_s=3, sampling_rate=22050, overlap=0):
     
     y = audiosignal
@@ -218,9 +251,24 @@ def get_heatmap(explanation_, instance_, fig_path_, segment_duration_s=3, mask=N
     plt.xticks(xticks, ['%.2f'%(x_to_time(t+ofst)) for t in xticks], rotation=0)
     # plt.xticks(xticks, ['%.1f'%t for t in xticks], rotation=0)
 
+    # print('yticks:', plt.yticks())
+    yticks = plt.yticks()
+    y_to_freq = lambda y: mel_bin_to_hz(y, n_mels=128)  # convert index to frequency in Hz
+
+    ytick_positions = plt.yticks()[0]  # get the y-tick positions
+    ytick_positions = [e for e in ytick_positions if e >= 0 and e <= 128]  # filter out invalid mel bins
+    # print('ytick positions:', ytick_positions)
+
+    # ytick_labels = ['%.2f'%(e) for e in ytick_positions]  # convert to Hz and format
+    ytick_labels = [f'{y_to_freq(int(e)):.0f}' for e in ytick_positions]  # convert to Hz and format
+    # print('ytick labels:', ytick_labels)
+
+    plt.yticks(ytick_positions, ytick_labels, rotation=0)  # convert mel bin to Hz
+
+
     plt.title('Spectrogram')
     plt.xlabel('Time (s)')
-    plt.ylabel('Frequency')
+    plt.ylabel('Frequency (Hz)')
     if fig_path_ != False: plt.savefig(fig_path_)
     if display:
         plt.show()
